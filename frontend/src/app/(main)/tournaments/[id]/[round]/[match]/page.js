@@ -120,7 +120,7 @@ export default function MatchDetailsPage() {
 
       const ws = createWebSocketConnection(`/ws/match/${matchId}/score`, {
         onOpen: (event, wsInstance) => {
-          console.log("WebSocket connected for match", matchId);
+          console.log("🔌 [Viewer] WebSocket connected for match", matchId);
           // Send initial score data to server
           if (wsInstance && wsInstance.readyState === WebSocket.OPEN) {
             wsInstance.send(
@@ -133,12 +133,13 @@ export default function MatchDetailsPage() {
           }
         },
         onClose: () => {
-          console.log("WebSocket disconnected for match", matchId);
+          console.log("🔌 [Viewer] WebSocket disconnected for match", matchId);
         },
         onError: (error) => {
-          console.error("WebSocket error:", error);
+          console.error("❌ [Viewer] WebSocket error:", error);
         },
         onMessage: (data) => {
+          console.log("📩 [Viewer] WebSocket message received:", data);
           if (data.type === "score_update") {
             setScoreA(data.teamA);
             setScoreB(data.teamB);
@@ -289,12 +290,12 @@ export default function MatchDetailsPage() {
               <ArrowLeft className="size-5" />
             </Button>
             <div className="flex flex-col items-center">
-                <h1 className="text-sm font-black uppercase tracking-wider">{tournament_name}</h1>
-                <div className="flex items-center gap-2 text-[10px] font-medium text-muted-foreground">
-                    <span>Court {court}</span>
-                    <span className="size-1 rounded-full bg-border" />
-                    <span>Round {round}</span>
-                </div>
+              <h1 className="text-sm font-black uppercase tracking-wider">{tournament_name}</h1>
+              <div className="flex items-center gap-2 text-[10px] font-medium text-muted-foreground">
+                <span>Court {court}</span>
+                <span className="size-1 rounded-full bg-border" />
+                <span>Round {round}</span>
+              </div>
             </div>
             <Button variant="ghost" size="icon" className="invisible">
               <MoreVertical className="size-5" />
@@ -373,11 +374,11 @@ export default function MatchDetailsPage() {
                 <span className="text-muted-foreground/30 mx-1">-</span>
                 <span className={scoreB > scoreA ? "text-foreground" : "text-muted-foreground"}>{scoreB}</span>
               </motion.div>
-              
+
               <div className="flex items-center gap-2 mt-2">
-                  <div className={`size-2 rounded-full ${scoreA > scoreB ? "bg-brand-blue" : "bg-muted"}`} />
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">VS</span>
-                  <div className={`size-2 rounded-full ${scoreB > scoreA ? "bg-brand-green" : "bg-muted"}`} />
+                <div className={`size-2 rounded-full ${scoreA > scoreB ? "bg-brand-blue" : "bg-muted"}`} />
+                <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">VS</span>
+                <div className={`size-2 rounded-full ${scoreB > scoreA ? "bg-brand-green" : "bg-muted"}`} />
               </div>
 
               {/* Match Completed Indicator */}
@@ -446,121 +447,121 @@ export default function MatchDetailsPage() {
         {/* Win Probability - Live from WebSocket */}
         <div className="px-6 py-4">
           <div className="flex justify-between items-center mb-3">
-             <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Win Probability</span>
-             <div className="flex gap-4 text-xs font-bold">
-                <span className="text-brand-blue">{winRate.toFixed(0)}%</span>
-                <span className="text-brand-green">{(100 - winRate).toFixed(0)}%</span>
-             </div>
+            <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Win Probability</span>
+            <div className="flex gap-4 text-xs font-bold">
+              <span className="text-brand-blue">{winRate.toFixed(0)}%</span>
+              <span className="text-brand-green">{(100 - winRate).toFixed(0)}%</span>
+            </div>
           </div>
-          
+
           <div className="h-2 w-full bg-muted rounded-full overflow-hidden flex">
-            <motion.div 
-                className="h-full bg-brand-blue"
-                initial={{ width: "50%" }}
-                animate={{ width: `${winRate}%` }}
-                transition={{ duration: 0.5, ease: "easeInOut" }}
+            <motion.div
+              className="h-full bg-brand-blue"
+              initial={{ width: "50%" }}
+              animate={{ width: `${winRate}%` }}
+              transition={{ duration: 0.5, ease: "easeInOut" }}
             />
-            <motion.div 
-                className="h-full bg-brand-green"
-                initial={{ width: "50%" }}
-                animate={{ width: `${100 - winRate}%` }}
-                transition={{ duration: 0.5, ease: "easeInOut" }}
+            <motion.div
+              className="h-full bg-brand-green"
+              initial={{ width: "50%" }}
+              animate={{ width: `${100 - winRate}%` }}
+              transition={{ duration: 0.5, ease: "easeInOut" }}
             />
           </div>
         </div>
 
         {/* Graph Section */}
         <div className="px-4 pb-8">
-            <Card className="p-4 border-border/50 shadow-sm bg-card/50 backdrop-blur-sm">
-                <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-xs font-black uppercase tracking-wider text-muted-foreground">Momentum</h3>
-                    <div className="flex gap-2">
-                        <div className="flex items-center gap-1">
-                            <div className="size-1.5 rounded-full bg-brand-blue" />
-                            <span className="text-[10px] font-medium text-muted-foreground">Team A</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                            <div className="size-1.5 rounded-full bg-brand-green" />
-                            <span className="text-[10px] font-medium text-muted-foreground">Team B</span>
-                        </div>
-                    </div>
+          <Card className="p-4 border-border/50 shadow-sm bg-card/50 backdrop-blur-sm">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xs font-black uppercase tracking-wider text-muted-foreground">Momentum</h3>
+              <div className="flex gap-2">
+                <div className="flex items-center gap-1">
+                  <div className="size-1.5 rounded-full bg-brand-blue" />
+                  <span className="text-[10px] font-medium text-muted-foreground">Team A</span>
                 </div>
-                <div className="h-48 w-full">
-                <ChartContainer
-                    config={{
-                    teamA: {
-                        label: "Team A",
-                        color: "#3b82f6", 
-                    },
-                    teamB: {
-                        label: "Team B",
-                        color: "#10b981", 
-                    },
-                    }}
-                    className="size-full"
-                >
-                    <ResponsiveContainer width="100%" height="100%">
-                        <LineChart
-                        data={chartData}
-                        margin={{ top: 5, right: 5, left: -20, bottom: 0 }}
-                        >
-                        <CartesianGrid
-                            strokeDasharray="3 3"
-                            stroke="hsl(var(--border))"
-                            opacity={0.4}
-                            vertical={false}
-                        />
-                        <XAxis
-                            dataKey="rally"
-                            stroke="hsl(var(--muted-foreground))"
-                            tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }}
-                            tickLine={false}
-                            axisLine={false}
-                            domain={[0, xAxisMax]}
-                            ticks={Array.from(
-                            { length: Math.floor(xAxisMax / 5) + 1 },
-                            (_, i) => i * 5
-                            )}
-                        />
-                        <YAxis
-                            stroke="hsl(var(--muted-foreground))"
-                            tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }}
-                            tickLine={false}
-                            axisLine={false}
-                            domain={[0, yAxisMax]} 
-                            ticks={[0, 5, 10, 15, 20, 25]}
-                        />
-                        <ChartTooltip
-                            content={
-                            <ChartTooltipContent
-                                className="bg-background border-border text-foreground shadow-xl rounded-lg text-xs font-medium"
-                                labelFormatter={(value) => `Rally ${value}`}
-                            />
-                            }
-                        />
-                        <Line
-                            type="monotone"
-                            dataKey="teamB"
-                            stroke="var(--color-teamB)"
-                            strokeWidth={3}
-                            dot={false}
-                            name="teamB"
-                            strokeOpacity={0.8}
-                        />
-                        <Line
-                            type="monotone"
-                            dataKey="teamA"
-                            stroke="var(--color-teamA)"
-                            strokeWidth={3}
-                            dot={false}
-                            name="teamA"
-                            strokeOpacity={0.8}
-                        />
-                        </LineChart>
-                    </ResponsiveContainer>
-                </ChartContainer>
+                <div className="flex items-center gap-1">
+                  <div className="size-1.5 rounded-full bg-brand-green" />
+                  <span className="text-[10px] font-medium text-muted-foreground">Team B</span>
                 </div>
-            </Card>
+              </div>
+            </div>
+            <div className="h-48 w-full">
+              <ChartContainer
+                config={{
+                  teamA: {
+                    label: "Team A",
+                    color: "#3b82f6",
+                  },
+                  teamB: {
+                    label: "Team B",
+                    color: "#10b981",
+                  },
+                }}
+                className="size-full"
+              >
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart
+                    data={chartData}
+                    margin={{ top: 5, right: 5, left: -20, bottom: 0 }}
+                  >
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      stroke="hsl(var(--border))"
+                      opacity={0.4}
+                      vertical={false}
+                    />
+                    <XAxis
+                      dataKey="rally"
+                      stroke="hsl(var(--muted-foreground))"
+                      tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }}
+                      tickLine={false}
+                      axisLine={false}
+                      domain={[0, xAxisMax]}
+                      ticks={Array.from(
+                        { length: Math.floor(xAxisMax / 5) + 1 },
+                        (_, i) => i * 5
+                      )}
+                    />
+                    <YAxis
+                      stroke="hsl(var(--muted-foreground))"
+                      tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }}
+                      tickLine={false}
+                      axisLine={false}
+                      domain={[0, yAxisMax]}
+                      ticks={[0, 5, 10, 15, 20, 25]}
+                    />
+                    <ChartTooltip
+                      content={
+                        <ChartTooltipContent
+                          className="bg-background border-border text-foreground shadow-xl rounded-lg text-xs font-medium"
+                          labelFormatter={(value) => `Rally ${value}`}
+                        />
+                      }
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="teamB"
+                      stroke="var(--color-teamB)"
+                      strokeWidth={3}
+                      dot={false}
+                      name="teamB"
+                      strokeOpacity={0.8}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="teamA"
+                      stroke="var(--color-teamA)"
+                      strokeWidth={3}
+                      dot={false}
+                      name="teamA"
+                      strokeOpacity={0.8}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </ChartContainer>
+            </div>
+          </Card>
         </div>
       </ScrollablePageContent>
     </ScrollablePage>

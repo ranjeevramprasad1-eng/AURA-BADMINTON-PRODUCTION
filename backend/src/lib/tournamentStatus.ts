@@ -34,6 +34,8 @@ export interface TeamStanding {
     wins: number;
     losses: number;
     points: number;
+    total_points_scored: number;    // Total game points scored across all matches
+    total_points_against: number;   // Total game points conceded
     qualified: boolean;
 }
 
@@ -141,15 +143,15 @@ export async function getStandings(tournamentId: number): Promise<Record<string,
             .eq('tournament_id', tournamentId)
             .like('round', `GS-${groupLetter}-%`)
             .in('status', ['completed', 'bye']);
-        
+
         // Filter out BYE matches from win/loss counting
         const actualMatches = groupMatches?.filter(m => m.status === 'completed') || [];
 
-        // Count wins per team (only from actual played matches, not BYEs)
-        const teamStats = new Map<number, { wins: number; losses: number }>();
-        teamIds.forEach(tid => teamStats.set(tid, { wins: 0, losses: 0 }));
+        // Count wins per team and track points scored (only from actual played matches, not BYEs)
+        const teamStats = new Map<number, { wins: number; losses: number; pointsScored: number; pointsAgainst: number }>();
+        teamIds.forEach(tid => teamStats.set(tid, { wins: 0, losses: 0, pointsScored: 0, pointsAgainst: 0 }));
 
-        // Get all teams in each match to count wins/losses
+        // Get all teams in each match to count wins/losses and total points scored
         if (actualMatches.length > 0) {
             for (const match of actualMatches) {
                 const { data: pairing } = await supabase
@@ -163,18 +165,45 @@ export async function getStandings(tournamentId: number): Promise<Record<string,
                 const { data: pairingTeams } = await supabase
                     .from('pairing_teams')
                     .select('team_id')
-                    .eq('pairing_id', pairing.id);
+                    .eq('pairing_id', pairing.id)
+                    .order('team_id', { ascending: true }); // Ensure consistent ordering: first = team_a, second = team_b
 
-                if (!pairingTeams) continue;
+                if (!pairingTeams || pairingTeams.length < 2) continue;
 
+                // Get final score for this match (latest score entry)
+                const { data: latestScore } = await supabase
+                    .from('scores')
+                    .select('team_a_score, team_b_score')
+                    .eq('match_id', match.id)
+                    .order('created_at', { ascending: false })
+                    .limit(1)
+                    .single();
+
+                // Map team_a/team_b to actual team IDs based on pairing order
+                const teamAId = pairingTeams[0].team_id;
+                const teamBId = pairingTeams[1].team_id;
+                const teamAScore = latestScore?.team_a_score ?? 0;
+                const teamBScore = latestScore?.team_b_score ?? 0;
+
+                // Update stats for each team
                 for (const pt of pairingTeams) {
                     const stats = teamStats.get(pt.team_id);
                     if (!stats) continue;
 
+                    // Count wins/losses
                     if (pt.team_id === match.winner_team_id) {
                         stats.wins++;
                     } else if (match.winner_team_id) {
                         stats.losses++;
+                    }
+
+                    // Add points scored/against
+                    if (pt.team_id === teamAId) {
+                        stats.pointsScored += teamAScore;
+                        stats.pointsAgainst += teamBScore;
+                    } else {
+                        stats.pointsScored += teamBScore;
+                        stats.pointsAgainst += teamAScore;
                     }
                 }
             }
@@ -183,7 +212,7 @@ export async function getStandings(tournamentId: number): Promise<Record<string,
         // Build standings
         const groupStandings: TeamStanding[] = teamIds.map(tid => {
             const team = teamMap.get(tid);
-            const stats = teamStats.get(tid) || { wins: 0, losses: 0 };
+            const stats = teamStats.get(tid) || { wins: 0, losses: 0, pointsScored: 0, pointsAgainst: 0 };
 
             return {
                 position: 0, // Will be set after sorting
@@ -194,13 +223,16 @@ export async function getStandings(tournamentId: number): Promise<Record<string,
                 wins: stats.wins,
                 losses: stats.losses,
                 points: stats.wins * 3, // 3 points per win
+                total_points_scored: stats.pointsScored,
+                total_points_against: stats.pointsAgainst,
                 qualified: false
             };
         });
 
-        // Sort by wins DESC, then by team_id for consistency
+        // Sort by wins DESC, then by total_points_scored DESC (tiebreaker), then team_id
         groupStandings.sort((a, b) => {
             if (b.wins !== a.wins) return b.wins - a.wins;
+            if (b.total_points_scored !== a.total_points_scored) return b.total_points_scored - a.total_points_scored;
             return a.team_id - b.team_id;
         });
 
@@ -302,7 +334,7 @@ export async function getMatches(
     }
 
     const { data: matches, error: matchesError } = await query;
-    
+
     console.log(`\n=== getMatches DEBUG ===`);
     console.log(`Tournament ID: ${tournamentId}`);
     console.log(`Filter: ${JSON.stringify(filter)}`);
@@ -312,7 +344,7 @@ export async function getMatches(
         console.log(`First match: ${JSON.stringify(matches[0])}`);
     }
     console.log(`========================\n`);
-    
+
     if (!matches || matches.length === 0) {
         return [];
     }
@@ -320,7 +352,7 @@ export async function getMatches(
     // Get teams - this now pulls from metadata.groups + invites
     const teams = await getTeamsFromInvites(tournamentId);
     const teamMap = new Map(teams.map(t => [t.team_id, t]));
-    
+
     console.log(`getMatches: Found ${teams.length} teams for tournament ${tournamentId}`);
 
     const result: MatchDetails[] = [];

@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { supabase } from './supabase';
+import { broadcastMatchScore, calculateWinRate } from '@/lib/websocket';
 
 const app = new Hono();
 
@@ -101,6 +102,7 @@ app.post('/start', async (c) => {
     try {
         const body = await c.req.json() as StartMatchPayload;
         const { match_id, serving_player_id, positions } = body;
+        const mid = Number(match_id);
 
         const ctx = await getMatchContext(match_id);
 
@@ -145,6 +147,9 @@ app.post('/start', async (c) => {
 
         await supabase.from('matches').update({ status: 'in_progress', start_time: new Date().toISOString() }).eq('id', match_id);
 
+        // Broadcast initial score
+        broadcastMatchScore(mid, 0, 0, 50);
+
         // Return same structure as /point so UI works immediately
         return c.json({
             success: true,
@@ -174,6 +179,7 @@ app.post('/start', async (c) => {
 app.post('/point', async (c) => {
     try {
         const { match_id, rally_winner_team_id } = await c.req.json();
+        const mid = Number(match_id);
         const ctx = await getMatchContext(match_id);
 
         if (ctx.gameId === 1) {
@@ -294,6 +300,10 @@ app.post('/point', async (c) => {
 
         if (insertErr) throw insertErr;
 
+        // Broadcast score update
+        const winRate = calculateWinRate(scoreA, scoreB);
+        broadcastMatchScore(mid, scoreA, scoreB, winRate);
+
         return c.json({
             success: true,
             // Match scoring.ts output format
@@ -325,6 +335,7 @@ app.post('/point', async (c) => {
 app.post('/undo', async (c) => {
     try {
         const { match_id } = await c.req.json();
+        const mid = Number(match_id);
 
         // Check count
         const { count } = await supabase.from('scores').select('*', { count: 'exact', head: true }).eq('match_id', match_id);
@@ -339,6 +350,10 @@ app.post('/undo', async (c) => {
 
         // Revert Match Completion if needed
         await supabase.from('matches').update({ status: 'in_progress', winner_team_id: null, end_time: null }).eq('id', match_id);
+
+        // Broadcast undo update
+        const winRate = calculateWinRate(current.team_a_score, current.team_b_score);
+        broadcastMatchScore(mid, current.team_a_score, current.team_b_score, winRate);
 
         return c.json({ success: true, state: current });
 

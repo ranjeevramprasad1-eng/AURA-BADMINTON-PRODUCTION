@@ -82,7 +82,7 @@ export function useTournamentEngine(tournamentId) {
 
   // Initialize groups mutation
   const initializeGroupsMutation = useMutation({
-    mutationFn: (numberOfGroups) => 
+    mutationFn: (numberOfGroups) =>
       tournamentEngineApi.initializeGroups(tournamentId, numberOfGroups),
     onSuccess: () => {
       invalidateAll();
@@ -99,7 +99,7 @@ export function useTournamentEngine(tournamentId) {
 
   // Swap team mutation
   const swapTeamMutation = useMutation({
-    mutationFn: ({ teamId, fromGroup, toGroup }) => 
+    mutationFn: ({ teamId, fromGroup, toGroup }) =>
       tournamentEngineApi.swapTeam(tournamentId, teamId, fromGroup, toGroup),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: keys.teams });
@@ -125,7 +125,7 @@ export function useTournamentEngine(tournamentId) {
 
   // Set match winner mutation
   const setMatchWinnerMutation = useMutation({
-    mutationFn: ({ matchId, winnerTeamId }) => 
+    mutationFn: ({ matchId, winnerTeamId }) =>
       tournamentEngineApi.setMatchWinner(matchId, winnerTeamId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: keys.matches });
@@ -153,6 +153,8 @@ export function useTournamentEngine(tournamentId) {
 
     // Refetch
     refetch: infoQuery.refetch,
+    refetchStandings: standingsQuery.refetch,
+    refetchMatches: matchesQuery.refetch,
     refetchAll: invalidateAll,
 
     // Mutations

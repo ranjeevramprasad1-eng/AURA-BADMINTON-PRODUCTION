@@ -25,6 +25,7 @@ import { getTournamentInfo, getStandings, getMatches, getNextAction, getRegister
 import { getTournamentRounds as getSortedRounds, parseRoundsFromMetadata } from "@/utils/rounds";
 import { POINTS_TO_WIN, type ScoreMetadata } from "@/lib/scoring";
 import { blended_point_prob, match_prob_with_beta_uncertainty } from "@/lib/ratingWinprobLogic";
+import { broadcastPairingsGenerated } from "@/lib/websocket";
 
 // GET /tournaments - Get all tournaments with filtering
 export async function getAllTournaments(c: Context<AuthContext>) {
@@ -2361,6 +2362,9 @@ export async function engineStartNextRound(c: Context<AuthContext>) {
     if (!result.success) {
       throw new HTTPException(400, { message: result.message });
     }
+
+    // Broadcast pairings generated event
+    broadcastPairingsGenerated(tournamentId, result.round || "Next Round");
 
     return c.json({ data: result }, 201);
   } catch (error) {

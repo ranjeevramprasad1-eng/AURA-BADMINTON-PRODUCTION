@@ -100,14 +100,14 @@ export async function getUserDetails(c: Context<AuthContext>) {
         )
         .in("id", matchIds);
 
-      // Get tournament names
+      // Get tournament names and end times
       const { data: tournaments } = await supabase
         .from("tournaments")
-        .select("id, name")
+        .select("id, name, end_time")
         .in("id", tournamentIds);
 
       const tournamentMap = new Map(
-        tournaments?.map((t: any) => [t.id, t.name]) || []
+        tournaments?.map((t: any) => [t.id, { name: t.name, end_time: t.end_time }]) || []
       );
 
       // Get all pairings for these matches
@@ -201,10 +201,13 @@ export async function getUserDetails(c: Context<AuthContext>) {
             ? match.courts[0]
             : match.courts;
 
+          const tournamentData = tournamentMap.get(match.tournament_id) || { name: '', end_time: null };
+
           return {
             match_id: match.id,
             tournament_id: match.tournament_id,
-            tournament_name: tournamentMap.get(match.tournament_id) || "",
+            tournament_name: tournamentData.name,
+            tournament_end_date: tournamentData.end_time,
             round: match.round,
             status: match.status,
             court: court?.court_number || null,

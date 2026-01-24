@@ -14,7 +14,7 @@ import type {
 // Import types and constants from scoring.ts
 import { POINTS_TO_WIN, WIN_BY, type ScoreMetadata } from "@/lib/scoring";
 import { update_player_ratings_in_db, blended_point_prob, match_prob_with_beta_uncertainty } from "@/lib/ratingWinprobLogic";
-import { broadcastMatchScore, broadcastMatchEnd } from "@/lib/websocket";
+import { broadcastMatchScore, broadcastMatchEnd, broadcastTournamentUpdate } from "@/lib/websocket";
 
 // Helper: Verify teams and return IDs strictly (A = Lower ID, B = Higher ID)
 async function getMatchContext(matchId: number) {
@@ -830,6 +830,23 @@ export async function recordPoint(c: Context<AuthContext>) {
 
       // Broadcast match end event
       broadcastMatchEnd(matchId, winnerId);
+
+      // Broadcast standings update to tournament channel
+      // Get tournament ID from match
+      const { data: matchData } = await supabase
+        .from("matches")
+        .select("tournament_id")
+        .eq("id", matchId)
+        .single();
+
+      if (matchData?.tournament_id) {
+        // Notify all clients subscribed to this tournament to refresh standings
+        broadcastTournamentUpdate(matchData.tournament_id, 'standings_update', {
+          matchId,
+          winnerId,
+          scores: { teamA: newScoreA, teamB: newScoreB }
+        });
+      }
     }
 
     // --- Live Score Calculation & Logging ---

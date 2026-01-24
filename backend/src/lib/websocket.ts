@@ -29,6 +29,7 @@ export function getMatchConnections(matchId: number): Set<any> {
 export function addConnection(matchId: number, ws: any) {
   const connections = getMatchConnections(matchId);
   connections.add(ws);
+  console.log(`🔌 [DEBUG] Connection added for match ${matchId}. Total connections: ${connections.size}`);
 }
 
 /**
@@ -38,7 +39,7 @@ export function removeConnection(matchId: number, ws: any) {
   const connections = matchConnections.get(matchId);
   if (connections) {
     connections.delete(ws);
-    
+
     // Clean up if no connections left
     if (connections.size === 0) {
       matchConnections.delete(matchId);
@@ -68,6 +69,8 @@ export function calculateWinRate(teamA: number, teamB: number): number {
  * @param winRate - Win rate percentage (0-100)
  */
 export function broadcastMatchScore(matchId: number, teamA: number, teamB: number, winRate: number) {
+  console.log(`📡 [Broadcaster] CALLED for match ${matchId} (Type: ${typeof matchId}) with score ${teamA}-${teamB}`);
+
   // Update the in-memory score
   const currentScore = getMatchScore(matchId);
   currentScore.teamA = teamA;
@@ -75,9 +78,12 @@ export function broadcastMatchScore(matchId: number, teamA: number, teamB: numbe
 
   // Get connections for this match
   const connections = matchConnections.get(matchId);
-  
+
+  console.log(`🔍 [Broadcaster] Checking connections for match ${matchId} (Type: ${typeof matchId}). Found: ${connections?.size ?? 0}`);
+
   if (!connections || connections.size === 0) {
     // No connections, just update the score in memory
+    console.log(`⚠️ [Broadcaster] No connections for match ${matchId}, skipping broadcast.`);
     return;
   }
 
@@ -111,7 +117,7 @@ export function broadcastMatchScore(matchId: number, teamA: number, teamB: numbe
 export function broadcastMatchEnd(matchId: number, winnerTeamId: number | null) {
   // Get connections for this match
   const connections = matchConnections.get(matchId);
-  
+
   if (!connections || connections.size === 0) {
     // No connections, nothing to broadcast
     return;
@@ -135,3 +141,88 @@ export function broadcastMatchEnd(matchId: number, winnerTeamId: number | null) 
   });
 }
 
+// ============================================================================
+// TOURNAMENT-LEVEL WEBSOCKET (for pairings, standings, etc.)
+// ============================================================================
+
+// Store WebSocket connections per tournament
+const tournamentConnections = new Map<number, Set<any>>();
+
+/**
+ * Get or create the connections set for a tournament
+ */
+export function getTournamentConnections(tournamentId: number): Set<any> {
+  if (!tournamentConnections.has(tournamentId)) {
+    tournamentConnections.set(tournamentId, new Set());
+  }
+  return tournamentConnections.get(tournamentId)!;
+}
+
+/**
+ * Add a WebSocket connection for a tournament
+ */
+export function addTournamentConnection(tournamentId: number, ws: any) {
+  const connections = getTournamentConnections(tournamentId);
+  connections.add(ws);
+  console.log(`🔌 Added tournament ${tournamentId} WS connection. Total: ${connections.size}`);
+}
+
+/**
+ * Remove a WebSocket connection for a tournament
+ */
+export function removeTournamentConnection(tournamentId: number, ws: any) {
+  const connections = tournamentConnections.get(tournamentId);
+  if (connections) {
+    connections.delete(ws);
+    console.log(`🔌 Removed tournament ${tournamentId} WS connection. Remaining: ${connections.size}`);
+
+    // Clean up if no connections left
+    if (connections.size === 0) {
+      tournamentConnections.delete(tournamentId);
+    }
+  }
+}
+
+/**
+ * Broadcast tournament update to all connected clients
+ */
+export function broadcastTournamentUpdate(tournamentId: number, type: string, data: any) {
+  const connections = tournamentConnections.get(tournamentId);
+
+  if (!connections || connections.size === 0) {
+    console.log(`📡 No tournament ${tournamentId} connections to broadcast to`);
+    return;
+  }
+
+  const message = JSON.stringify({
+    type,
+    tournamentId,
+    ...data,
+  });
+
+  connections.forEach((client) => {
+    if (client.readyState === 1) { // WebSocket.OPEN
+      try {
+        client.send(message);
+      } catch (error) {
+        console.error(`❌ Error sending tournament WS message:`, error);
+      }
+    }
+  });
+
+  console.log(`📡 Broadcasted tournament ${tournamentId} ${type} to ${connections.size} client(s)`);
+}
+
+/**
+ * Broadcast new pairings generated event
+ */
+export function broadcastPairingsGenerated(tournamentId: number, round: string) {
+  broadcastTournamentUpdate(tournamentId, 'pairings_generated', { round });
+}
+
+/**
+ * Broadcast standings update event
+ */
+export function broadcastStandingsUpdate(tournamentId: number, standings: any) {
+  broadcastTournamentUpdate(tournamentId, 'standings_update', { standings });
+}

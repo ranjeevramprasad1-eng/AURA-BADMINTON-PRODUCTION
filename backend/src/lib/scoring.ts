@@ -1,7 +1,16 @@
 import { Hono } from 'hono';
 import { supabase } from './supabase';
+import { broadcastMatchScore, calculateWinRate, broadcastTournamentUpdate } from '@/lib/websocket';
 
 const app = new Hono();
+
+// ... (skipping lines)
+
+// Broadcast Initial Score
+
+// Broadcast Tournament Update (Match Started)
+
+// Normalize Response
 
 // --- CONSTANTS ---
 export const PB_POINTS_TO_WIN = 11;
@@ -92,7 +101,9 @@ export async function getMatchContext(matchId: number) {
         matchStatus: match.status,
         teamA_id: teams[0].team_id,
         teamB_id: teams[1].team_id,
-        gameId: gameId // 1 = Pickleball, 2 = Badminton
+        gameId: gameId,
+        tournamentId: match.tournament_id,
+        round: match.round
     };
 }
 
@@ -302,6 +313,16 @@ app.post('/start', async (c) => {
 
         // Update Match Status
         await supabase.from('matches').update({ status: 'in_progress', start_time: new Date().toISOString() }).eq('id', match_id);
+
+        // Broadcast Tournament Update (Match Started)
+        broadcastTournamentUpdate(ctx.tournamentId, 'match_start', {
+            matchId: Number(match_id),
+            status: 'in_progress',
+            round: ctx.round
+        });
+
+        // Broadcast Initial Score
+        broadcastMatchScore(Number(match_id), 0, 0, 50);
 
         // Normalize Response
         const response: any = {
@@ -542,7 +563,19 @@ app.post('/point', async (c) => {
 
             if (matchComplete) {
                 await supabase.from('matches').update({ status: 'completed', winner_team_id: winnerId, end_time: new Date().toISOString() }).eq('id', match_id);
+
+                // Broadcast Match Completion
+                broadcastTournamentUpdate(ctx.tournamentId, 'match_complete', {
+                    matchId: Number(match_id),
+                    status: 'completed',
+                    winnerTeamId: winnerId,
+                    round: ctx.round
+                });
             }
+
+            // Broadcast score update
+            const winRate = calculateWinRate(scoreA, scoreB);
+            broadcastMatchScore(Number(match_id), scoreA, scoreB, winRate);
 
             return c.json({
                 data: {
@@ -631,7 +664,19 @@ app.post('/undo', async (c) => {
             })
             .eq('id', match_id);
 
-        const ctx = await getMatchContext(match_id);
+        const ctx = await getMatchContext(Number(match_id));
+
+        // Broadcast Status Revert
+        broadcastTournamentUpdate(ctx.tournamentId, 'match_update', {
+            matchId: Number(match_id),
+            status: 'in_progress',
+            winnerTeamId: null,
+            round: ctx.round
+        });
+
+        // Broadcast undo update
+        const winRate = calculateWinRate(current.team_a_score, current.team_b_score);
+        broadcastMatchScore(Number(match_id), current.team_a_score, current.team_b_score, winRate);
 
         const response: any = {
             success: true,

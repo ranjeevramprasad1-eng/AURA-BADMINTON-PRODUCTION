@@ -1,10 +1,12 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useRef } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useUser } from "@/hooks/useUser";
 import { useAuth } from "@/contexts/AuthContext";
 import { tournamentsApi, matchesApi } from "@/lib/api";
+import { createWebSocketConnection } from "@/lib/websocket";
 import { Card } from "@/components/ui/card";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -33,6 +35,8 @@ export default function ProfilePage() {
   const router = useRouter();
   const { data: userData, isLoading } = useUser();
   const { signOut } = useAuth();
+  const queryClient = useQueryClient();
+  const wsConnectionsRef = useRef({});
 
   // Fetch referee tournaments
   const { data: refereeData, isLoading: isLoadingReferee } = useQuery({
@@ -52,7 +56,7 @@ export default function ProfilePage() {
     },
   });
 
-  // Fetch referee matches (matches from tournaments where user is a referee)
+  // Fetch referee matches
   const { data: refereeMatchesData, isLoading: isLoadingRefereeMatches } =
     useQuery({
       queryKey: ["referee-matches"],
@@ -62,7 +66,7 @@ export default function ProfilePage() {
       },
     });
 
-  // Fetch registered tournaments (tournaments user is registered in)
+  // Fetch registered tournaments
   const { data: registeredData, isLoading: isLoadingRegistered } = useQuery({
     queryKey: ["registered-tournaments"],
     queryFn: async () => {
@@ -70,6 +74,82 @@ export default function ProfilePage() {
       return response.data.data;
     },
   });
+
+  const now = new Date();
+  // Add 1 day buffer for night tournaments that stretch into early morning
+  const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+
+  // Helper to get tournament end date
+  const getTournamentEndDate = (match) => {
+    const dateStr = match.tournament_end_date || match.end_date || match.end_time || match.tournament?.end_date || match.tournament?.end_time;
+    return dateStr ? new Date(dateStr) : null;
+  };
+
+  // Helper to check if tournament has ended
+  const hasTournamentEnded = (match) => {
+    const tournamentEndDate = getTournamentEndDate(match);
+    if (!tournamentEndDate) return false;
+    const endDateWithBuffer = new Date(tournamentEndDate.getTime() + ONE_DAY_MS);
+    return now > endDateWithBuffer;
+  };
+
+  // Safely get tournaments from userData
+  const tournaments = userData?.tournaments || [];
+
+  // Filter matches by status AND tournament end date
+  const liveMatches =
+    tournaments?.filter((t) => {
+      if (hasTournamentEnded(t)) {
+        return false;
+      }
+      return t.status === "scheduled" || t.status === "in_progress";
+    }) || [];
+
+  // Get active tournaments (registered and not ended) for WebSocket connections
+  // We connect to ALL active tournaments so we receive "pairings_generated" events even if we don't have a match yet
+  const activeTournamentIds = (registeredData?.tournaments || [])
+    .filter(t => !hasTournamentEnded(t))
+    .map(t => t.id || t.tournament_id);
+
+  // WebSocket connections for tournament updates
+  useEffect(() => {
+    if (!activeTournamentIds || activeTournamentIds.length === 0) return;
+
+    // Clean up connections for tournaments that are no longer relevant
+    Object.keys(wsConnectionsRef.current).forEach(id => {
+      if (!activeTournamentIds.includes(Number(id))) {
+        if (wsConnectionsRef.current[id]) {
+          wsConnectionsRef.current[id].close();
+          delete wsConnectionsRef.current[id];
+        }
+      }
+    });
+
+    // Create new connections
+    activeTournamentIds.forEach(id => {
+      if (wsConnectionsRef.current[id]) return; // Already connected
+
+      const ws = createWebSocketConnection(`/ws/tournament/${id}/updates`, {
+        onMessage: (data) => {
+          if (data.type === "match_start" || data.type === "match_complete" || data.type === "match_update" || data.type === "pairings_generated") {
+            // Update user details to reflect new match status or new pairings
+            queryClient.invalidateQueries({ queryKey: ["user", "details"] });
+            // Also refresh registered tournaments in case status changed
+            queryClient.invalidateQueries({ queryKey: ["registered-tournaments"] });
+          }
+        },
+        reconnect: true,
+      });
+      wsConnectionsRef.current[id] = ws;
+    });
+  }, [activeTournamentIds.join(','), queryClient]);
+
+  // Global cleanup
+  useEffect(() => {
+    return () => {
+      Object.values(wsConnectionsRef.current).forEach(ws => ws && ws.close());
+    };
+  }, []);
 
   if (isLoading) {
     return (
@@ -109,32 +189,31 @@ export default function ProfilePage() {
     );
   }
 
-  const { name, username, aura, age, gender, photo_url, tournaments } =
-    userData;
+  const { name, username, aura, age, gender, photo_url } = userData;
 
-  // Filter matches by status (matches user is playing in)
-  // Live matches: only "scheduled" and "in_progress" statuses
-  const liveMatches =
-    tournaments?.filter(
-      (t) => t.status === "scheduled" || t.status === "in_progress",
-    ) || [];
+
+
+  // Past matches: completed status OR from tournaments that have ended (with buffer)
   const pastMatches =
-    tournaments?.filter(
-      (t) => t.status !== "scheduled" && t.status !== "in_progress",
-    ) || [];
+    tournaments?.filter((t) => {
+      // If tournament ended more than 1 day ago, show in Past
+      if (hasTournamentEnded(t)) {
+        return true;
+      }
+      // Otherwise, only show if match is completed (won, lost, etc.)
+      return t.status !== "scheduled" && t.status !== "in_progress";
+    }) || [];
 
-  // Get registered tournaments and filter for scheduled/upcoming/live ones
+  // Get registered tournaments and filter for past ones
   const allRegisteredTournaments = registeredData?.tournaments || [];
-  const now = new Date();
-  const scheduledTournaments = allRegisteredTournaments.filter((tournament) => {
-    const startDate = tournament.start_date
-      ? new Date(tournament.start_date)
-      : null;
-    const endDate = tournament.end_date ? new Date(tournament.end_date) : null;
 
-    // Show tournaments that haven't ended yet (upcoming or live)
-    if (endDate && now > endDate) return false;
-    return true;
+  // Past tournaments: have ended (with 1 day buffer for Past tab)
+  const pastTournaments = allRegisteredTournaments.filter((tournament) => {
+    const endDate = tournament.end_date ? new Date(tournament.end_date) : null;
+    if (!endDate) return false;
+    // Add 1 day buffer
+    const endDateWithBuffer = new Date(endDate.getTime() + ONE_DAY_MS);
+    return now > endDateWithBuffer;
   });
 
   // Helper to get partner name from match
@@ -272,35 +351,7 @@ export default function ProfilePage() {
                 </div>
               </Card>
 
-              {/* Secondary Stats */}
-              <Card className="p-3 border-border/50 bg-background/50 hover:bg-background/80 transition-colors">
-                <div className="flex flex-col">
-                  <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mb-1">
-                    Matches
-                  </span>
-                  <span className="text-2xl font-black">
-                    {pastMatches.length + liveMatches.length}
-                  </span>
-                </div>
-              </Card>
-              <Card className="p-3 border-border/50 bg-background/50 hover:bg-background/80 transition-colors">
-                <div className="flex flex-col">
-                  <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mb-1">
-                    Win Rate
-                  </span>
-                  <span className="text-2xl font-black text-green-500">
-                    {pastMatches.length > 0
-                      ? Math.round(
-                          (pastMatches.filter((m) => m.status === "won")
-                            .length /
-                            pastMatches.length) *
-                            100,
-                        )
-                      : 0}
-                    %
-                  </span>
-                </div>
-              </Card>
+
             </div>
           </div>
         </div>
@@ -554,13 +605,13 @@ export default function ProfilePage() {
                         );
                       })}
                     </div>
-                  ) : scheduledTournaments.length === 0 ? (
+                  ) : (
                     <div className="flex flex-col items-center justify-center py-12 text-center space-y-4 border-2 border-dashed border-border/50 rounded-2xl bg-muted/5">
                       <div className="bg-muted/30 p-4 rounded-full">
                         <Trophy className="size-8 text-muted-foreground/30" />
                       </div>
                       <p className="text-muted-foreground text-sm font-medium">
-                        No scheduled tournaments or matches in progress.
+                        No matches in progress.
                       </p>
                       <Button
                         variant="outline"
@@ -570,178 +621,7 @@ export default function ProfilePage() {
                         Find a Tournament
                       </Button>
                     </div>
-                  ) : (
-                    <div className="flex flex-col items-center justify-center py-8 text-center space-y-2 border-2 border-dashed border-border/50 rounded-2xl bg-muted/5">
-                      <p className="text-muted-foreground text-sm font-medium">
-                        No matches in progress.
-                      </p>
-                    </div>
                   )}
-
-                  {/* Scheduled Tournaments */}
-                  {isLoadingRegistered ? (
-                    <div className="space-y-3">
-                      <div className="h-32 w-full bg-muted/40 animate-pulse rounded-xl" />
-                    </div>
-                  ) : scheduledTournaments.length > 0 ? (
-                    <div className="space-y-3 mb-6">
-                      <div className="flex items-center gap-2 mb-2">
-                        <CalendarDays className="size-4 text-primary" />
-                        <h4 className="text-xs font-black uppercase tracking-widest text-muted-foreground">
-                          Scheduled Tournaments
-                        </h4>
-                      </div>
-                      {[...scheduledTournaments]
-                        .sort((a, b) => {
-                          const now = new Date();
-                          const oneHourFromNow = new Date(
-                            now.getTime() + 60 * 60 * 1000,
-                          );
-
-                          // Helper function to determine if tournament starts within an hour
-                          const startsWithinHour = (tournament) => {
-                            const startDate = tournament.start_date
-                              ? new Date(tournament.start_date)
-                              : null;
-                            return (
-                              startDate &&
-                              startDate > now &&
-                              startDate <= oneHourFromNow
-                            );
-                          };
-
-                          // Helper function to determine if tournament is live
-                          const isLive = (tournament) => {
-                            const startDate = tournament.start_date
-                              ? new Date(tournament.start_date)
-                              : null;
-                            const endDate = tournament.end_date
-                              ? new Date(tournament.end_date)
-                              : null;
-                            return (
-                              startDate &&
-                              endDate &&
-                              now >= startDate &&
-                              now <= endDate
-                            );
-                          };
-
-                          const aStartsSoon = startsWithinHour(a);
-                          const bStartsSoon = startsWithinHour(b);
-                          const aIsLive = isLive(a);
-                          const bIsLive = isLive(b);
-
-                          // Tournaments starting within an hour come first
-                          if (aStartsSoon && !bStartsSoon) return -1;
-                          if (!aStartsSoon && bStartsSoon) return 1;
-
-                          // Then live tournaments
-                          if (aIsLive && !bIsLive) return -1;
-                          if (!aIsLive && bIsLive) return 1;
-
-                          // Then sort by start date (earliest first)
-                          const aStart = a.start_date
-                            ? new Date(a.start_date)
-                            : new Date(0);
-                          const bStart = b.start_date
-                            ? new Date(b.start_date)
-                            : new Date(0);
-                          return aStart - bStart;
-                        })
-                        .map((tournament) => {
-                          const startDate = tournament.start_date
-                            ? new Date(tournament.start_date)
-                            : null;
-                          const endDate = tournament.end_date
-                            ? new Date(tournament.end_date)
-                            : null;
-                          let status = "upcoming";
-                          let statusLabel = "Upcoming";
-                          let statusColor = "bg-blue-500/10 text-blue-600";
-
-                          if (startDate && endDate) {
-                            if (now >= startDate && now <= endDate) {
-                              status = "live";
-                              statusLabel = "Live";
-                              statusColor =
-                                "bg-red-500/10 text-red-600 animate-pulse";
-                            }
-                          }
-
-                          return (
-                            <Card
-                              key={tournament.id}
-                              onClick={() =>
-                                router.push(`/tournaments/${tournament.id}`)
-                              }
-                              className="cursor-pointer overflow-hidden border-border/50 hover:border-primary/50 transition-all duration-300 shadow-sm hover:shadow-lg hover:shadow-primary/10"
-                            >
-                              <div className="p-4">
-                                <div className="flex items-start justify-between gap-3 mb-3">
-                                  <div className="flex-1 min-w-0">
-                                    <h3 className="text-base font-black tracking-tight uppercase italic line-clamp-1 text-foreground mb-1">
-                                      {tournament.name}
-                                    </h3>
-                                    {tournament.venue?.name && (
-                                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                                        <MapPin className="size-3" />
-                                        <span className="line-clamp-1">
-                                          {tournament.venue.name}
-                                        </span>
-                                      </div>
-                                    )}
-                                  </div>
-                                  <span
-                                    className={`text-[10px] font-black px-2 py-0.5 rounded uppercase shrink-0 ${statusColor}`}
-                                  >
-                                    {statusLabel}
-                                  </span>
-                                </div>
-                                {tournament.start_date && (
-                                  <div className="flex items-center gap-2 text-xs text-muted-foreground mb-3">
-                                    <CalendarDays className="size-3.5" />
-                                    <span>
-                                      {new Date(
-                                        tournament.start_date,
-                                      ).toLocaleDateString("en-US", {
-                                        month: "short",
-                                        day: "numeric",
-                                        year: "numeric",
-                                      })}
-                                    </span>
-                                  </div>
-                                )}
-                                <Button
-                                  size="sm"
-                                  variant={
-                                    status === "live" ? "default" : "outline"
-                                  }
-                                  className="w-full gap-2 text-xs font-bold"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    router.push(
-                                      `/tournaments/${tournament.id}`,
-                                    );
-                                  }}
-                                >
-                                  {status === "live" ? (
-                                    <>
-                                      <Activity className="size-3.5" />
-                                      View Tournament
-                                    </>
-                                  ) : (
-                                    <>
-                                      View Tournament
-                                      <ChevronRight className="size-3.5" />
-                                    </>
-                                  )}
-                                </Button>
-                              </div>
-                            </Card>
-                          );
-                        })}
-                    </div>
-                  ) : null}
                 </TabsContent>
 
                 {/* Past Matches Tab */}
@@ -770,13 +650,12 @@ export default function ProfilePage() {
                                   </span>
                                 </div>
                                 <span
-                                  className={`text-[10px] font-black px-2 py-0.5 rounded uppercase ${
-                                    match.status === "won"
-                                      ? "bg-green-500/10 text-green-600"
-                                      : match.status === "lost"
-                                        ? "bg-red-500/10 text-red-600"
-                                        : "bg-muted text-muted-foreground"
-                                  }`}
+                                  className={`text-[10px] font-black px-2 py-0.5 rounded uppercase ${match.status === "won"
+                                    ? "bg-green-500/10 text-green-600"
+                                    : match.status === "lost"
+                                      ? "bg-red-500/10 text-red-600"
+                                      : "bg-muted text-muted-foreground"
+                                    }`}
                                 >
                                   {match.status === "won"
                                     ? "Victory"
@@ -973,11 +852,11 @@ export default function ProfilePage() {
                               <span className="text-xs font-bold text-foreground uppercase truncate">
                                 {tournament.start_date
                                   ? new Date(
-                                      tournament.start_date,
-                                    ).toLocaleDateString("en-US", {
-                                      month: "short",
-                                      day: "numeric",
-                                    })
+                                    tournament.start_date,
+                                  ).toLocaleDateString("en-US", {
+                                    month: "short",
+                                    day: "numeric",
+                                  })
                                   : "TBD"}
                               </span>
                               <span className="text-[10px] font-medium text-muted-foreground">
@@ -990,10 +869,10 @@ export default function ProfilePage() {
                             <div className="flex flex-col min-w-0">
                               <span className="text-xs font-bold text-foreground uppercase truncate">
                                 {tournament.match_format?.eligible_gender ===
-                                "M"
+                                  "M"
                                   ? "Men's"
                                   : tournament.match_format?.eligible_gender ===
-                                      "W"
+                                    "W"
                                     ? "Women's"
                                     : "Mixed"}
                               </span>
@@ -1070,13 +949,12 @@ export default function ProfilePage() {
                       <div className="flex">
                         {/* Status Indicator */}
                         <div
-                          className={`w-1.5 ${
-                            match.status === "in_progress"
-                              ? "bg-red-500"
-                              : match.status === "completed"
-                                ? "bg-green-500"
-                                : "bg-yellow-500"
-                          }`}
+                          className={`w-1.5 ${match.status === "in_progress"
+                            ? "bg-red-500"
+                            : match.status === "completed"
+                              ? "bg-green-500"
+                              : "bg-yellow-500"
+                            }`}
                         />
 
                         <div className="flex-1 p-3">
@@ -1091,13 +969,12 @@ export default function ProfilePage() {
                               </span>
                             </div>
                             <span
-                              className={`text-[10px] font-black px-2 py-0.5 rounded uppercase ${
-                                match.status === "in_progress"
-                                  ? "bg-red-500/10 text-red-600 animate-pulse"
-                                  : match.status === "completed"
-                                    ? "bg-green-500/10 text-green-600"
-                                    : "bg-yellow-500/10 text-yellow-600"
-                              }`}
+                              className={`text-[10px] font-black px-2 py-0.5 rounded uppercase ${match.status === "in_progress"
+                                ? "bg-red-500/10 text-red-600 animate-pulse"
+                                : match.status === "completed"
+                                  ? "bg-green-500/10 text-green-600"
+                                  : "bg-yellow-500/10 text-yellow-600"
+                                }`}
                             >
                               {match.status === "in_progress"
                                 ? "LIVE"
@@ -1112,10 +989,10 @@ export default function ProfilePage() {
                             <div className="text-sm font-medium truncate flex-1">
                               {match.players?.length > 0
                                 ? match.players
-                                    .map((p) => p.username)
-                                    .join(" & ")
-                                    .substring(0, 30) +
-                                  (match.players.length > 2 ? "..." : "")
+                                  .map((p) => p.username)
+                                  .join(" & ")
+                                  .substring(0, 30) +
+                                (match.players.length > 2 ? "..." : "")
                                 : "Teams TBD"}
                             </div>
                             {match.scores && (
