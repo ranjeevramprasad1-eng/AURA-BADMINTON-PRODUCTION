@@ -50,7 +50,7 @@ export default function RefereeClient() {
   const matchStatus = matchData?.status;
   const isMatchStarted = matchStatus === "in_progress" || matchStatus === "completed";
   const isMatchCompleted = matchStatus === "completed";
-  
+
   // Track match completion state (can be updated via websocket)
   const [matchEnded, setMatchEnded] = useState(isMatchCompleted);
   const [winnerTeamId, setWinnerTeamId] = useState(matchData?.winner_team_id || null);
@@ -72,9 +72,9 @@ export default function RefereeClient() {
   });
 
   const startMatchMutation = useMutation({
-    mutationFn: ({ matchId, servingTeamId, positions }) =>
+    mutationFn: ({ matchId, positions, ...rest }) =>
       matchesApi.start(matchId, {
-        serving_team_id: servingTeamId,
+        ...rest, // serving_team_id, serving_player_id
         positions: {
           pos_1: positions.pos1,
           pos_2: positions.pos2,
@@ -124,7 +124,7 @@ export default function RefereeClient() {
           }
         );
       }
-      
+
       // Invalidate queries to ensure we have the latest data
       queryClient.invalidateQueries({
         queryKey: ["referee-match", params.id, params.round, params.match],
@@ -239,8 +239,11 @@ export default function RefereeClient() {
 
   const { tournament_name, players, scores, round, court, metadata } = matchData;
 
+  // Detect Game ID (1 = Pickleball, 2 = Badminton)
+  const gameId = matchState?.gameId || matchData?.gameId || 1;
+  const isBadminton = gameId === 2;
+
   // Group players into teams by team_id
-  // Sort team IDs in ascending order to match backend's teamA_id (lower) and teamB_id (higher) assignment
   const teamIds = [
     ...new Set(players?.map((p) => p.team_id).filter(Boolean) || []),
   ].sort((a, b) => a - b);
@@ -253,43 +256,55 @@ export default function RefereeClient() {
       ?.filter((p) => p.team_id === teamIds[1])
       .map((p) => ({ ...p, photo_url: faker.image.avatarGitHub() })) || [];
 
-  // Get serving team information from match state
+  // Get serving team/player information
   const servingTeamId = matchState?.serving_team_id;
   const serverSequence = matchState?.server_sequence;
-  
+  const servingPlayerIdState = matchState?.serving_player_id;
+  const badmintonSets = matchState?.sets || { a: 0, b: 0 };
+
   const teamAScore = scores?.teamA || 0;
   const teamBScore = scores?.teamB || 0;
   const teamAId = teamIds[0] ? String(teamIds[0]) : null;
   const teamBId = teamIds[1] ? String(teamIds[1]) : null;
-  
-  // Get winner team information
+
   const winnerTeamIdFromData = matchData?.winner_team_id || winnerTeamId;
   const isTeamAWinner = winnerTeamIdFromData && String(winnerTeamIdFromData) === teamAId;
   const isTeamBWinner = winnerTeamIdFromData && String(winnerTeamIdFromData) === teamBId;
-  
-  // Format score with serverSequence if available (pickleball format: X - Y - Z)
-  const currentScore = scores 
-    ? (serverSequence !== null && serverSequence !== undefined 
-        ? `${scores.teamA} - ${scores.teamB} - ${serverSequence}` 
+
+  // Format score display
+  let currentScore = "0 - 0";
+  if (isBadminton) {
+    // Show Sets if any sets won, else show points.
+    // Format: "Sets: A-B" below? Or include in main display?
+    // User wants "Scoring".
+    currentScore = `${teamAScore} - ${teamBScore}`;
+  } else {
+    currentScore = scores
+      ? (serverSequence !== null && serverSequence !== undefined
+        ? `${scores.teamA} - ${scores.teamB} - ${serverSequence}`
         : `${scores.teamA} - ${scores.teamB}`)
-    : (serverSequence !== null && serverSequence !== undefined 
-        ? `0 - 0 - ${serverSequence}` 
+      : (serverSequence !== null && serverSequence !== undefined
+        ? `0 - 0 - ${serverSequence}`
         : "0 - 0");
+  }
+
   const isTeamAServing = servingTeamId && String(servingTeamId) === teamAId;
   const isTeamBServing = servingTeamId && String(servingTeamId) === teamBId;
 
-  // Determine which player position is serving
-  // server_sequence: 1 = right player, 2 = left player
+  // Determine serve
   const getServingPlayerId = () => {
-    if (!isMatchStarted || !servingTeamId || serverSequence === null || serverSequence === undefined) {
-      return null;
+    if (!isMatchStarted) return null;
+
+    if (isBadminton) {
+      // Backend provides explicit serving_player_id for Badminton
+      return servingPlayerIdState || null;
     }
-    
+
+    if (!servingTeamId || serverSequence === null || serverSequence === undefined) return null;
+
     if (isTeamAServing) {
-      // Team A: sequence 1 = pos1 (right), sequence 2 = pos2 (left)
       return serverSequence === 1 ? positions.pos1 : positions.pos2;
     } else if (isTeamBServing) {
-      // Team B: sequence 1 = pos3 (right), sequence 2 = pos4 (left)
       return serverSequence === 1 ? positions.pos3 : positions.pos4;
     }
     return null;
@@ -298,32 +313,44 @@ export default function RefereeClient() {
   const servingPlayerId = getServingPlayerId();
   const isPlayerServing = (playerId) => servingPlayerId === playerId;
 
-  // Check if all positions are assigned
   const allPositionsAssigned =
     positions.pos1 &&
     positions.pos2 &&
     positions.pos3 &&
     positions.pos4;
 
-  // Handle start match
   const handleStartMatch = () => {
     if (!allPositionsAssigned) {
       toast.error("Please assign all positions before starting the match");
       return;
     }
 
-    // Default to team A serving first (can be made configurable)
+    // Default to team A serving first
     const servingTeamId = parseInt(teamAId);
     if (!servingTeamId) {
       toast.error("Invalid team configuration");
       return;
     }
 
-    startMatchMutation.mutate({
+    const payload = {
       matchId: parseInt(params.match),
-      servingTeamId,
       positions,
-    });
+    };
+
+    if (isBadminton) {
+      // For Badminton, we need serving_player_id. Default to right player (pos1) of Team A.
+      if (!positions.pos1) {
+        toast.error("Missing starting player position (pos1)");
+        return;
+      }
+      payload.serving_player_id = positions.pos1;
+    } else {
+      // For Pickleball, we need serving_team_id
+      payload.serving_team_id = servingTeamId;
+    }
+
+    console.log("Starting match with payload:", payload);
+    startMatchMutation.mutate(payload);
   };
 
   const handleScoreUpdate = (teamId) => {
@@ -495,6 +522,7 @@ export default function RefereeClient() {
           <div className=" flex items-center justify-center gap-3 mb-4">
             <div className="relative bg-primary text-4xl font-black tabular-nums tracking-tighter py-4 px-12 rounded-2xl shadow-xl shadow-primary/20 text-center border-4 border-background ring-1 ring-border/20">
               <span className="text-primary-foreground">{currentScore}</span>
+
               {isMatchStarted && (
                 <Button
                   variant="secondary"
@@ -535,15 +563,15 @@ export default function RefereeClient() {
                   isTeamAServing
                     ? "bg-blue-500/10 text-blue-600 border-blue-500/20"
                     : isTeamBServing
-                    ? "bg-red-500/10 text-red-600 border-red-500/20"
-                    : "bg-muted text-muted-foreground border-border"
+                      ? "bg-red-500/10 text-red-600 border-red-500/20"
+                      : "bg-muted text-muted-foreground border-border"
                 )}
               >
                 {isTeamAServing
                   ? `Team A ${serverSequence ? `• S${serverSequence}` : ""}`
                   : isTeamBServing
-                  ? `Team B ${serverSequence ? `• S${serverSequence}` : ""}`
-                  : "Unknown"}
+                    ? `Team B ${serverSequence ? `• S${serverSequence}` : ""}`
+                    : "Unknown"}
               </div>
             </div>
           )}
@@ -624,8 +652,8 @@ export default function RefereeClient() {
                                 disabled={matchEnded}
                                 className={cn(
                                   "size-12 rounded-full shadow-lg transition-all duration-200",
-                                  isTeamAServing 
-                                    ? "bg-brand-blue text-white hover:bg-brand-blue/90 hover:scale-110 ring-4 ring-brand-blue/20" 
+                                  isTeamAServing
+                                    ? "bg-brand-blue text-white hover:bg-brand-blue/90 hover:scale-110 ring-4 ring-brand-blue/20"
                                     : "bg-background text-muted-foreground hover:text-brand-blue border-2 border-border",
                                   matchEnded && "opacity-50 cursor-not-allowed"
                                 )}
@@ -671,7 +699,7 @@ export default function RefereeClient() {
                     {!isTeamAssigned("left") ? (
                       <div className="flex items-center justify-center min-h-[200px] p-2">
                         {isTeamAssigned("right") &&
-                        !hasOtherTeamEnoughPlayers("right") ? (
+                          !hasOtherTeamEnoughPlayers("right") ? (
                           <div className="text-center text-xs font-medium text-muted-foreground px-4">
                             No players available
                           </div>
@@ -757,7 +785,7 @@ export default function RefereeClient() {
                     {!isTeamAssigned("right") ? (
                       <div className="flex items-center justify-center min-h-[200px] p-2">
                         {isTeamAssigned("left") &&
-                        !hasOtherTeamEnoughPlayers("left") ? (
+                          !hasOtherTeamEnoughPlayers("left") ? (
                           <div className="text-center text-xs font-medium text-muted-foreground px-4">
                             No players available
                           </div>
@@ -886,8 +914,8 @@ export default function RefereeClient() {
                                 disabled={matchEnded}
                                 className={cn(
                                   "size-12 rounded-full shadow-lg transition-all duration-200",
-                                  isTeamBServing 
-                                    ? "bg-brand-green text-white hover:bg-brand-green/90 hover:scale-110 ring-4 ring-brand-green/20" 
+                                  isTeamBServing
+                                    ? "bg-brand-green text-white hover:bg-brand-green/90 hover:scale-110 ring-4 ring-brand-green/20"
                                     : "bg-background text-muted-foreground hover:text-brand-green border-2 border-border",
                                   matchEnded && "opacity-50 cursor-not-allowed"
                                 )}
@@ -967,7 +995,7 @@ export default function RefereeClient() {
                             ? "bg-brand-blue/10 border-brand-blue ring-2 ring-brand-blue/30"
                             : "bg-muted border-border"
                         )}>
-                            <User className="size-4 text-muted-foreground" />
+                          <User className="size-4 text-muted-foreground" />
                         </div>
                         <span className="font-bold text-sm flex-1">
                           {getPlayerById(positions.pos1)?.name ||
@@ -994,7 +1022,7 @@ export default function RefereeClient() {
                             ? "bg-brand-blue/10 border-brand-blue ring-2 ring-brand-blue/30"
                             : "bg-muted border-border"
                         )}>
-                            <User className="size-4 text-muted-foreground" />
+                          <User className="size-4 text-muted-foreground" />
                         </div>
                         <span className="font-bold text-sm flex-1">
                           {getPlayerById(positions.pos2)?.name ||
@@ -1032,7 +1060,7 @@ export default function RefereeClient() {
                             ? "bg-brand-green/10 border-brand-green ring-2 ring-brand-green/30"
                             : "bg-muted border-border"
                         )}>
-                            <User className="size-4 text-muted-foreground" />
+                          <User className="size-4 text-muted-foreground" />
                         </div>
                         <span className="font-bold text-sm flex-1">
                           {getPlayerById(positions.pos3)?.name ||
@@ -1059,7 +1087,7 @@ export default function RefereeClient() {
                             ? "bg-brand-green/10 border-brand-green ring-2 ring-brand-green/30"
                             : "bg-muted border-border"
                         )}>
-                            <User className="size-4 text-muted-foreground" />
+                          <User className="size-4 text-muted-foreground" />
                         </div>
                         <span className="font-bold text-sm flex-1">
                           {getPlayerById(positions.pos4)?.name ||

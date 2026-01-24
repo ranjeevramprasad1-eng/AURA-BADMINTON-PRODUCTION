@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Badminton Scoring Simulation</title>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #f0f2f5;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .container {
+            max-width: 800px;
+            width: 100%;
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Court Visualization */
+        .court {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: 1fr 1fr;
+            gap: 2px;
+            background: #2c3e50;
+            border: 4px solid #2c3e50;
+            margin: 20px 0;
+            height: 300px;
+            position: relative;
+        }
+
+        .net-line {
+            position: absolute;
+            top: 50%;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: #fff;
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 12px;
+            letter-spacing: 2px;
+        }
+
+        .court-half {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            height: 100%;
+            background: #4ade80;
+            /* Green court */
+        }
+
+        .box {
+            background: #a3e635;
+            /* Light Green */
+            border: 1px solid white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            flex-direction: column;
+        }
+
+        /* Team A is Top Half (physically visually, but logically we just label boxes) */
+        /* Let's split Top (Team A) and Bottom (Team B) for visual clarity */
+        /* Actually standard diagram: Net in middle. Top = Team A, Bottom = Team B */
+
+        .team-section {
+            height: 150px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            /* Left/Right */
+        }
+
+        .team-a-bg {
+            background: #e0f2fe;
+        }
+
+        .team-b-bg {
+            background: #fce7f3;
+        }
+
+        .player-token {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: #3b82f6;
+            color: white;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+        }
+
+        .player-token.serving {
+            box-shadow: 0 0 0 4px #fbbf24;
+            /* Gold Ring */
+            transform: scale(1.1);
+        }
+
+        .label {
+            font-size: 10px;
+            color: #64748b;
+            margin-top: 4px;
+        }
+
+        /* Scoreboard */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .score-box {
+            text-align: center;
+        }
+
+        .score-big {
+            font-size: 3rem;
+            font-weight: bold;
+        }
+
+        .set-score {
+            font-size: 1.2rem;
+            color: #64748b;
+        }
+
+        /* Controls */
+        .controls {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 20px;
+        }
+
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        button:hover {
+            opacity: 0.9;
+        }
+
+        .btn-a {
+            background: #3b82f6;
+            color: white;
+        }
+
+        .btn-b {
+            background: #ec4899;
+            color: white;
+        }
+
+        .btn-undo {
+            background: #64748b;
+            color: white;
+        }
+
+        .btn-reset {
+            background: #ef4444;
+            color: white;
+        }
+
+        .log-panel {
+            background: #1e293b;
+            color: #10b981;
+            /* Terminal green */
+            font-family: monospace;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+            height: 150px;
+            overflow-y: auto;
+            font-size: 12px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+        <div class="header">
+            <div class="score-box">
+                <div>Team A (Blue)</div>
+                <div class="score-big" id="scoreA">0</div>
+                <div class="set-score" id="setsA">Sets: 0</div>
+            </div>
+            <div class="score-box">
+                <div>VS</div>
+                <div style="font-size: 0.8rem; color: #94a3b8;">First to 21 (Win by 2)</div>
+            </div>
+            <div class="score-box">
+                <div>Team B (Pink)</div>
+                <div class="score-big" id="scoreB">0</div>
+                <div class="set-score" id="setsB">Sets: 0</div>
+            </div>
+        </div>
+
+        <!-- Court Visual -->
+        <!-- Top Half: Team A -->
+        <div style="text-align: center; font-weight: bold; margin-bottom: 5px;">TEAM A SIDE</div>
+        <div class="team-section team-a-bg">
+            <!-- Badminton: Even (Right), Odd (Left). 
+             From camera view (behind Team A): Right is Right. 
+             We will label them clearly. -->
+            <div class="box" id="box_a_left">
+                <span class="label">Left (Odd)</span>
+                <div id="slot_a_left"></div>
+            </div>
+            <div class="box" id="box_a_right">
+                <span class="label">Right (Even)</span>
+                <div id="slot_a_right"></div>
+            </div>
+        </div>
+
+        <!-- Net -->
+        <div style="background: #334155; height: 6px; width: 100%; margin: 5px 0;"></div>
+
+        <!-- Bottom Half: Team B -->
+        <div class="team-section team-b-bg">
+            <!-- Team B is facing Team A, so their Right is opposite A's Left visually if mirror. 
+             But usually simple 2D view: Team B Right | Team B Left (Receiving view).
+             Let's sticky to logical labels: Right Box | Left Box -->
+            <div class="box" id="box_b_right">
+                <span class="label">Right (Even)</span>
+                <div id="slot_b_right"></div>
+            </div>
+            <div class="box" id="box_b_left">
+                <span class="label">Left (Odd)</span>
+                <div id="slot_b_left"></div>
+            </div>
+        </div>
+        <div style="text-align: center; font-weight: bold; margin-top: 5px;">TEAM B SIDE</div>
+
+        <div class="controls">
+            <button class="btn-a" onclick="winPoint('a')">Point Team A</button>
+            <button class="btn-b" onclick="winPoint('b')">Point Team B</button>
+            <button class="btn-undo" onclick="undo()">Undo</button>
+            <button class="btn-reset" onclick="resetMatch()">Reset Match</button>
+        </div>
+
+        <div class="log-panel" id="logs">
+            > Match initialized. Score 0-0. Server: A1 (Right Court).
+        </div>
+    </div>
+
+    <script>
+        // --- APP STATE ---
+        // IDs: Team A (A1, A2), Team B (B1, B2)
+        const PLAYERS = {
+            A1: { id: 101, name: "A1", team: 'a' },
+            A2: { id: 102, name: "A2", team: 'a' },
+            B1: { id: 201, name: "B1", team: 'b' },
+            B2: { id: 202, name: "B2", team: 'b' }
+        };
+
+        let state = {
+            score: { a: 0, b: 0 },
+            sets: { a: 0, b: 0 },
+            servingTeam: 'a',
+            servingPlayerId: 101, // A1 starts
+            positions: {
+                // Logical assignments to court sides
+                a: { right: 101, left: 102 }, // A1 Right, A2 Left
+                b: { right: 201, left: 202 }  // B1 Right, B2 Left
+            },
+            history: [] // Stack for undo
+        };
+
+        // --- CONFIG ---
+        const POINTS_TO_WIN = 21; // Standard Badminton
+        const WIN_BY = 1; // Changed to 1 as per user request
+        const MAX_POINT = 30; // Golden point cap (optional, implementing for robustness)
+
+        // --- LOGIC ENGINE ---
+
+        function getNextState(currentState, winnerTeam) {
+            // Deep copy
+            let next = JSON.parse(JSON.stringify(currentState));
+
+            // Push current to history before mutating next (wait, undo logic uses stack push separately)
+            // Here we just calculate NEXT state.
+
+            const isServerWin = (currentState.servingTeam === winnerTeam);
+
+            if (winnerTeam === 'a') {
+                next.score.a++;
+            } else {
+                next.score.b++;
+            }
+
+            // ROTATION LOGIC
+            if (isServerWin) {
+                log(`Serving Team (${winnerTeam.toUpperCase()}) wins point. Score: ${next.score.a}-${next.score.b}`);
+
+                // 1. Swap Positions (Only for serving team)
+                if (winnerTeam === 'a') {
+                    // Swap A
+                    const temp = next.positions.a.right;
+                    next.positions.a.right = next.positions.a.left;
+                    next.positions.a.left = temp;
+                    log(`>> Team A Rotates: Positions Swapped.`);
+                } else {
+                    // Swap B
+                    const temp = next.positions.b.right;
+                    next.positions.b.right = next.positions.b.left;
+                    next.positions.b.left = temp;
+                    log(`>> Team B Rotates: Positions Swapped.`);
+                }
+
+                // 2. Same Server continues
+                // (Positions swapped, so they will be in the correct Even/Odd court logically for the new score?
+                //  Wait. Badminton rule: 
+                //  If score becomes Even -> Server should be in Right.
+                //  If score becomes Odd -> Server should be in Left.
+                //  Since we swapped, does the player match the score parity? 
+                //  Example: 0-0 (Right). Win -> 1-0. Swap (Server goes Left). Correct.
+                //  Logic Holds: Just swapping positions works because parity flips with score +1.)
+
+            } else {
+                // Side Out
+                log(`Side Out! ${winnerTeam.toUpperCase()} wins point. Score: ${next.score.a}-${next.score.b}`);
+
+                // 1. Change Serving Team
+                next.servingTeam = winnerTeam;
+
+                // 2. NO Position Swap for anyone.
+
+                // 3. Determine New Server based on Score Parity
+                // Rule: If score is Even, player in Right serves. If Odd, Left serves.
+                const newScore = (winnerTeam === 'a') ? next.score.a : next.score.b;
+                const isEven = (newScore % 2 === 0);
+
+                if (winnerTeam === 'a') {
+                    next.servingPlayerId = isEven ? next.positions.a.right : next.positions.a.left;
+                } else {
+                    next.servingPlayerId = isEven ? next.positions.b.right : next.positions.b.left;
+                }
+                log(`>> New Server: ${getPlayerName(next.servingPlayerId)} (${isEven ? 'Right/Even' : 'Left/Odd'})`);
+            }
+
+            // CHECK SET WIN
+            if (checkSetWin(next.score.a, next.score.b)) {
+                log(`!!! SET WON BY TEAM ${winnerTeam.toUpperCase()} !!!`);
+                if (winnerTeam === 'a') next.sets.a++;
+                else next.sets.b++;
+
+                // Reset Game for Next Set (if not match over)
+                if (next.sets.a < 2 && next.sets.b < 2) {
+                    // Start new set
+                    next.score = { a: 0, b: 0 };
+                    // Who serves first in next set? Usually winner of previous.
+                    next.servingTeam = winnerTeam;
+                    // Reset positions? Standard is usually players can reset positions or stay.
+                    // For simplicity, let's Reset to default lineup but keep winner serving.
+                    // Resetting helps avoid "stuck in wrong box" confusion for users.
+                    next.positions = {
+                        a: { right: 101, left: 102 },
+                        b: { right: 201, left: 202 }
+                    };
+
+                    // Server for 0-0 is Right court player
+                    next.servingPlayerId = (winnerTeam === 'a') ? 101 : 201;
+
+                    log(`>> Starting Set ${next.sets.a + next.sets.b + 1}. Server: ${getPlayerName(next.servingPlayerId)}`);
+                } else {
+                    log(`!!! MATCH OVER !!! Winner: Team ${winnerTeam.toUpperCase()}`);
+                }
+            }
+
+            return next;
+        }
+
+        function checkSetWin(scoreA, scoreB) {
+            if (scoreA >= POINTS_TO_WIN && (scoreA - scoreB) >= WIN_BY) return true;
+            if (scoreB >= POINTS_TO_WIN && (scoreB - scoreA) >= WIN_BY) return true;
+            // Cap at 30
+            if (scoreA === MAX_POINT || scoreB === MAX_POINT) return true;
+            return false;
+        }
+
+        // --- UI HELPERS ---
+
+        function getPlayerName(id) {
+            return Object.values(PLAYERS).find(p => p.id === id)?.name || id;
+        }
+
+        function render() {
+            // Scores
+            document.getElementById('scoreA').innerText = state.score.a;
+            document.getElementById('scoreB').innerText = state.score.b;
+            document.getElementById('setsA').innerText = `Sets: ${state.sets.a}`;
+            document.getElementById('setsB').innerText = `Sets: ${state.sets.b}`;
+
+            // Clear Slots
+            ['slot_a_left', 'slot_a_right', 'slot_b_left', 'slot_b_right'].forEach(id => {
+                document.getElementById(id).innerHTML = '';
+            });
+
+            // Helper to create token element
+            const createToken = (id) => {
+                const div = document.createElement('div');
+                div.className = `player-token ${state.servingPlayerId === id ? 'serving' : ''}`;
+                div.innerText = getPlayerName(id);
+                if (state.servingPlayerId === id) {
+                    div.title = "Current Server";
+                    // Add shuttlecock icon/text?
+                }
+                return div;
+            };
+
+            // Place A
+            document.getElementById('slot_a_right').appendChild(createToken(state.positions.a.right));
+            document.getElementById('slot_a_left').appendChild(createToken(state.positions.a.left));
+
+            // Place B
+            document.getElementById('slot_b_right').appendChild(createToken(state.positions.b.right));
+            document.getElementById('slot_b_left').appendChild(createToken(state.positions.b.left));
+        }
+
+        function log(msg) {
+            const el = document.getElementById('logs');
+            const line = document.createElement('div');
+            line.innerText = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            el.prepend(line);
+        }
+
+        // --- ACTIONS ---
+
+        window.winPoint = (team) => {
+            // 1. Create Snapshot of current state for history (excluding history itself)
+            const snapshot = JSON.parse(JSON.stringify(state));
+            delete snapshot.history; // Remove reference to history stack
+
+            // 2. Calculate New State
+            const newState = getNextState(state, team);
+
+            // 3. Attach history (Old History + Snapshot)
+            // Note: state.history might be undefined if we just initialized, so handle that
+            const currentHistory = state.history || [];
+            newState.history = [...currentHistory, snapshot];
+
+            // 4. Update Global State
+            state = newState;
+
+            // 5. Render
+            render();
+        };
+
+        window.undo = () => {
+            if (state.history.length === 0) {
+                log("Cannot undo. Start of match.");
+                return;
+            }
+            const previous = state.history.pop();
+            // Restore state but keep the popped history (which is effectively -1 now)
+            const historyStack = state.history;
+            state = previous;
+            state.history = historyStack;
+            log("<< Undo");
+            render();
+        };
+
+        window.resetMatch = () => {
+            if (!confirm("Reset match?")) return;
+            location.reload();
+        };
+
+        // Init
+        render();
+
+    </script>
+
+</body>
+
+</html>

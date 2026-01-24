@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Badminton API Visualizer</title>
+    <style>
+        :root {
+            --primary: #3b82f6;
+            --secondary: #ec4899;
+            --bg: #f8fafc;
+            --surface: #ffffff;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: var(--bg);
+            color: #334155;
+            padding: 20px;
+            line-height: 1.5;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .full-width {
+            grid-column: span 2;
+        }
+
+        .card {
+            background: var(--surface);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        h2 {
+            margin-top: 0;
+            font-size: 1.25rem;
+            color: #1e293b;
+            border-bottom: 2px solid #e2e8f0;
+            padding-bottom: 10px;
+        }
+
+        h3 {
+            font-size: 1rem;
+            margin-bottom: 5px;
+            color: #64748b;
+        }
+
+        input,
+        button {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            box-sizing: border-box;
+        }
+
+        button {
+            font-weight: bold;
+            cursor: pointer;
+            transition: opacity 0.2s;
+            color: white;
+            border: none;
+        }
+
+        button:hover {
+            opacity: 0.9;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+        }
+
+        .btn-secondary {
+            background: var(--secondary);
+        }
+
+        .btn-neutral {
+            background: #64748b;
+        }
+
+        .btn-danger {
+            background: #ef4444;
+        }
+
+        .row {
+            display: flex;
+            gap: 10px;
+        }
+
+        .col {
+            flex: 1;
+        }
+
+        /* VISUALIZATION */
+        .scoreboard {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #1e293b;
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+        }
+
+        .score-team {
+            text-align: center;
+        }
+
+        .score-val {
+            font-size: 3rem;
+            font-weight: 800;
+            line-height: 1;
+        }
+
+        .set-val {
+            font-size: 1rem;
+            opacity: 0.8;
+        }
+
+        .server-indicator {
+            color: #facc15;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-top: 5px;
+            visibility: hidden;
+        }
+
+        .server-indicator.active {
+            visibility: visible;
+        }
+
+        .court-viz {
+            height: 200px;
+            background: #10b981;
+            position: relative;
+            border: 4px solid white;
+            margin-top: 20px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: 1fr 1fr;
+        }
+
+        .net {
+            position: absolute;
+            top: 50%;
+            width: 100%;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.8);
+            z-index: 10;
+        }
+
+        .court-quadrant {
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+
+        .player-dot {
+            width: 30px;
+            height: 30px;
+            background: white;
+            border-radius: 50%;
+            color: #333;
+            font-size: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            transition: all 0.3s ease;
+        }
+
+        .player-dot.serving {
+            box-shadow: 0 0 0 4px #facc15;
+            transform: scale(1.1);
+            z-index: 20;
+        }
+
+        pre {
+            background: #0f172a;
+            color: #10b981;
+            padding: 15px;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-size: 12px;
+            max-height: 300px;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: bold;
+        }
+
+        .status-badge.completed {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .status-badge.progress {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+        <!-- header -->
+        <div class="full-width">
+            <div class="scoreboard">
+                <div class="score-team">
+                    <h3>TEAM A</h3>
+                    <div class="score-val" id="disp_score_a">0</div>
+                    <div class="set-val">Sets: <span id="disp_sets_a">0</span></div>
+                    <div class="server-indicator" id="ind_a">Serving</div>
+                </div>
+                <div style="text-align: center; opacity: 0.5;">
+                    <div>VS</div>
+                    <div style="font-size: 0.8rem">Win by <span id="config_win_by">1</span></div>
+                </div>
+                <div class="score-team">
+                    <h3>TEAM B</h3>
+                    <div class="score-val" id="disp_score_b">0</div>
+                    <div class="set-val">Sets: <span id="disp_sets_b">0</span></div>
+                    <div class="server-indicator" id="ind_b">Serving</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- LEFT COLUMN: CONTROLS -->
+        <div class="card">
+            <h2>1. Match Setup</h2>
+            <input type="text" id="baseUrl" value="http://localhost:8000/api/match" placeholder="API URL">
+            <div class="row">
+                <div class="col">
+                    <input type="number" id="matchId" placeholder="Match ID" value="1">
+                </div>
+                <div class="col">
+                    <button class="btn-neutral" onclick="loadMatchDetails()">Load Players</button>
+                </div>
+            </div>
+
+            <!-- Hidden Inputs for logic -->
+            <input type="hidden" id="servingTeamId">
+
+            <div style="background: #f1f5f9; padding: 10px; border-radius: 6px; margin-bottom: 10px;">
+                <h3>Team A (ID: <span id="lbl_team_a_id">?</span>)</h3>
+                <div class="row">
+                    <select id="pos_a_right" class="col"></select> <!-- Now using Dropdowns -->
+                    <select id="pos_a_left" class="col"></select>
+                </div>
+            </div>
+
+            <div style="background: #f1f5f9; padding: 10px; border-radius: 6px; margin-bottom: 10px;">
+                <h3>Team B (ID: <span id="lbl_team_b_id">?</span>)</h3>
+                <div class="row">
+                    <select id="pos_b_right" class="col"></select>
+                    <select id="pos_b_left" class="col"></select>
+                </div>
+            </div>
+
+            <div class="row">
+                <label>Serving Player:</label>
+                <select id="sel_serving_player"></select>
+            </div>
+
+            <button class="btn-primary" onclick="startMatch()">Start / Reset Match</button>
+        </div>
+
+        <div class="card">
+            <h2>2. Live Controls</h2>
+            <p style="font-size: 0.9rem; color: #64748b;">Click to award point. The system calculates rotation
+                automatically.</p>
+
+            <div class="row">
+                <button class="btn-primary" onclick="gamePoint(1)">Point Team A</button>
+                <button class="btn-secondary" onclick="gamePoint(2)">Point Team B</button>
+            </div>
+
+            <button class="btn-neutral" onclick="undo()" style="margin-top: 10px;">Undo Last Point</button>
+
+            <div id="status_msg" style="margin-top: 10px; font-weight: bold; text-align: center;"></div>
+        </div>
+
+        <!-- RIGHT COLUMN: VISUALIZATION & LOGS -->
+        <div class="card full-width">
+            <h2>Court Status (Live from API)</h2>
+            <div class="court-viz">
+                <div class="net"></div>
+                <!-- Quadrants (Top=A, Bottom=B) -->
+                <!-- A Left/Right -->
+                <div class="court-quadrant" id="q_a_left"></div>
+                <div class="court-quadrant" id="q_a_right"></div>
+                <!-- B Left/Right -->
+                <div class="court-quadrant" id="q_b_left"></div>
+                <div class="court-quadrant" id="q_b_right"></div>
+            </div>
+        </div>
+
+        <div class="card full-width">
+            <h2>API Response Log</h2>
+            <pre id="jsonLog">Ready...</pre>
+        </div>
+    </div>
+
+    <script>
+        // Config
+        // NOTE: Update these IDs to match your DB/User input if they change!
+        let TEAM_A_ID = 1;
+        let TEAM_B_ID = 2; // Will be set by input
+
+        function log(data) {
+            document.getElementById('jsonLog').textContent = JSON.stringify(data, null, 2);
+        }
+
+        function updateUI(data) {
+            if (!data || !data.success) return;
+
+            // 1. Scores
+            document.getElementById('disp_score_a').textContent = data.score_1_2;
+            document.getElementById('disp_score_b').textContent = data.score_3_4;
+
+            // 2. Sets
+            if (data.sets) {
+                document.getElementById('disp_sets_a').textContent = data.sets.a;
+                document.getElementById('disp_sets_b').textContent = data.sets.b;
+            }
+
+            // 3. Status
+            const statusEl = document.getElementById('status_msg');
+            if (data.is_match_over) {
+                const winner = (data.winner_team_id == TEAM_A_ID) ? "TEAM A" : "TEAM B";
+                statusEl.innerHTML = `<span class="status-badge completed">MATCH OVER - WINNER: ${winner}</span>`;
+            } else {
+                statusEl.innerHTML = `<span class="status-badge progress">IN PROGRESS</span>`;
+            }
+
+            // 4. Server Indicator
+            // We need to know which team the serving_player_id belongs to.
+            // We can infer from the positions.
+            const sPID = data.serving_player_id;
+            const pos = data.positions;
+
+            if (pos) {
+                const isServerA = (sPID == pos.pos_1 || sPID == pos.pos_2);
+                const isServerB = (sPID == pos.pos_3 || sPID == pos.pos_4);
+
+                document.getElementById('ind_a').classList.toggle('active', isServerA);
+                document.getElementById('ind_b').classList.toggle('active', isServerB);
+
+                // 5. Court Viz
+                renderPlayer('q_a_right', pos.pos_1, sPID);
+                renderPlayer('q_a_left', pos.pos_2, sPID);
+                renderPlayer('q_b_right', pos.pos_3, sPID);
+                renderPlayer('q_b_left', pos.pos_4, sPID);
+            }
+        }
+
+        function renderPlayer(elementId, playerId, serverId) {
+            const el = document.getElementById(elementId);
+            el.innerHTML = ''; // Clear
+            if (playerId) {
+                const dot = document.createElement('div');
+                dot.className = `player-dot ${playerId === serverId ? 'serving' : ''}`;
+                dot.innerText = playerId; // Can map to name if we had it
+                if (playerId === serverId) dot.title = "Server";
+                el.appendChild(dot);
+            }
+        }
+
+        async function req(endpoint, body) {
+            const baseUrl = document.getElementById('baseUrl').value;
+            try {
+                const res = await fetch(baseUrl + endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                const json = await res.json();
+
+                if (json.is_pickleball) {
+                    alert("Pickleball!");
+                    return json;
+                }
+
+                log(json);
+                updateUI(json);
+                return json;
+            } catch (e) {
+                log({ error: e.message });
+                alert("API Error: " + e.message);
+            }
+        }
+
+        let TEAM_A_DATA = null;
+        let TEAM_B_DATA = null;
+
+        async function loadMatchDetails() {
+            const matchId = document.getElementById('matchId').value;
+            if (!matchId) return alert("Enter Match ID");
+
+            const res = await fetch(document.getElementById('baseUrl').value + '/init/' + matchId);
+            const data = await res.json();
+
+            if (data.error) return alert(data.error);
+            if (data.success) {
+                TEAM_A_DATA = data.teamA;
+                TEAM_B_DATA = data.teamB;
+
+                document.getElementById('lbl_team_a_id').innerText = TEAM_A_DATA.id;
+                document.getElementById('lbl_team_b_id').innerText = TEAM_B_DATA.id;
+
+                // Populate Dropdowns
+                populateSelect('pos_a_right', TEAM_A_DATA.players);
+                populateSelect('pos_a_left', TEAM_A_DATA.players, 1); // Select second player if exists
+
+                populateSelect('pos_b_right', TEAM_B_DATA.players);
+                populateSelect('pos_b_left', TEAM_B_DATA.players, 1);
+
+                // Populate Serving Player (All Players)
+                const allPlayers = [...TEAM_A_DATA.players, ...TEAM_B_DATA.players];
+                populateSelect('sel_serving_player', allPlayers);
+
+                log({ message: "Loaded Match Data", data });
+            }
+        }
+
+        function populateSelect(id, players, defaultIndex = 0) {
+            const el = document.getElementById(id);
+            el.innerHTML = '';
+            players.forEach((p, i) => {
+                const opt = document.createElement('option');
+                opt.value = p.id;
+                opt.innerText = `${p.name} (${p.id})`;
+                if (i === defaultIndex) opt.selected = true;
+                el.appendChild(opt);
+            });
+        }
+
+        async function startMatch() {
+            const matchId = Number(document.getElementById('matchId').value);
+            if (!TEAM_A_DATA) return alert("Please Load Players first");
+
+            const servingPlayerId = Number(document.getElementById('sel_serving_player').value);
+
+            const payload = {
+                match_id: matchId,
+                serving_player_id: servingPlayerId,
+                positions: {
+                    pos_a_right: Number(document.getElementById('pos_a_right').value),
+                    pos_a_left: Number(document.getElementById('pos_a_left').value),
+                    pos_b_right: Number(document.getElementById('pos_b_right').value),
+                    pos_b_left: Number(document.getElementById('pos_b_left').value)
+                }
+            };
+
+            const res = await req('/start', payload);
+            if (res && res.success) {
+                // Update UI
+                // ... (Same as before, relying on updateUI)
+            }
+        }
+
+        async function gamePoint(teamIdx) {
+            if (!TEAM_A_DATA) return alert("Match data not loaded");
+
+            const matchId = Number(document.getElementById('matchId').value);
+            const teamId = (teamIdx === 1) ? TEAM_A_DATA.id : TEAM_B_DATA.id;
+
+            await req('/point', {
+                match_id: matchId,
+                rally_winner_team_id: Number(teamId)
+            });
+        }
+
+        async function undo() {
+            const matchId = Number(document.getElementById('matchId').value);
+            await req('/undo', { match_id: matchId });
+        }
+
+        // Remove old window.onload hack
+        window.onload = () => { };
+
+    </script>
+
+</body>

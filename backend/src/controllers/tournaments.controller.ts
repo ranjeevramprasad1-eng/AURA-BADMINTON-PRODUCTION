@@ -1,3 +1,4 @@
+
 import { HTTPException } from "hono/http-exception";
 import { supabase } from "@/lib/supabase";
 import type { Context } from "hono";
@@ -95,13 +96,13 @@ export async function getAllTournaments(c: Context<AuthContext>) {
 
     // Filter by status, max_age, and eligible_gender after fetching (nested relations)
     let filteredTournaments = tournaments;
-    
+
     if (status) {
       const now = new Date();
       filteredTournaments = filteredTournaments?.filter((t: any) => {
         const startTime = t.start_time ? new Date(t.start_time) : null;
         const endTime = t.end_time ? new Date(t.end_time) : null;
-        
+
         if (status === "completed") {
           return endTime && now > endTime;
         } else if (status === "live") {
@@ -133,7 +134,7 @@ export async function getAllTournaments(c: Context<AuthContext>) {
       } else {
         targetGender = genderUpper;
       }
-      
+
       filteredTournaments = filteredTournaments?.filter((t: any) => {
         const matchFormat = Array.isArray(t.match_format)
           ? t.match_format[0]
@@ -173,7 +174,7 @@ export async function getAllTournaments(c: Context<AuthContext>) {
 
         // Get venue data (handle both object and array formats)
         const venue = Array.isArray(t.venue) ? t.venue[0] : t.venue;
-        
+
         // Get game data (handle both object and array formats)
         const game = Array.isArray(t.games) ? t.games[0] : t.games;
 
@@ -436,12 +437,12 @@ export async function getTournamentById(c: Context<AuthContext>) {
         },
         hosted_by: host
           ? {
-              id: host.id,
-              name: host.username,
-              username: host.username,
-              photo_url: host.photo_url,
-              phone: null, // Would need to fetch from user metadata
-            }
+            id: host.id,
+            name: host.username,
+            username: host.username,
+            photo_url: host.photo_url,
+            phone: null, // Would need to fetch from user metadata
+          }
           : null,
         referee: refereeDetails,
         registered_players: registeredPlayers,
@@ -621,7 +622,7 @@ export async function getTournamentRound(c: Context<AuthContext>) {
     matches?.forEach((match: any) => {
       // Get pairing for this match (typically one pairing per match)
       const matchPairing = pairings?.find((p: any) => p.match_id === match.id);
-      
+
       if (!matchPairing) {
         // No pairing found for this match
         pairingsMap.set(match.id, {
@@ -643,7 +644,7 @@ export async function getTournamentRound(c: Context<AuthContext>) {
       const pairingTeamIds = pairingTeams
         ?.filter((pt: any) => pt.pairing_id === matchPairing.id)
         .map((pt: any) => pt.team_id) || [];
-      
+
       // Build players array with correct team assignments (A/B)
       const allPlayers = pairingTeamIds.flatMap((teamId: number, teamIndex: number) => {
         return teamMembers
@@ -1015,10 +1016,10 @@ export async function getMatchDetails(c: Context<AuthContext>) {
 
       const getStat = (id: number) => {
         const r = ratingData?.find((x: any) => x.player_id === id);
-        return { 
-          id, 
-          mu: r?.aura_mu ?? 25.0, 
-          sigma: r?.aura_sigma ?? 8.33 
+        return {
+          id,
+          mu: r?.aura_mu ?? 25.0,
+          sigma: r?.aura_sigma ?? 8.33
         };
       };
 
@@ -1043,14 +1044,14 @@ export async function getMatchDetails(c: Context<AuthContext>) {
     // Build players array with team assignments
     // Get the pairing for this match (typically one pairing per match)
     const matchPairing = pairings?.find((p: any) => p.match_id === matchId);
-    
+
     let allPlayers: any[] = [];
     if (matchPairing) {
       // Get all teams for this pairing (typically 2 teams)
       const pairingTeamIds = pairingTeams
         ?.filter((pt: any) => pt.pairing_id === matchPairing.id)
         .map((pt: any) => pt.team_id) || [];
-      
+
       // Build players array with correct team assignments (A/B)
       allPlayers = pairingTeamIds.flatMap((teamId: number, teamIndex: number) => {
         return teamMembers
@@ -1157,6 +1158,7 @@ export async function getRefereeMatchDetails(c: Context<AuthContext>) {
         `
       id,
       name,
+      game_id,
       match_format:match_format (
         id,
         type,
@@ -1278,14 +1280,14 @@ export async function getRefereeMatchDetails(c: Context<AuthContext>) {
     // Build players array
     // Get the pairing for this match (typically one pairing per match)
     const matchPairing = pairings?.find((p: any) => p.match_id === matchId);
-    
+
     let allPlayers: any[] = [];
     if (matchPairing) {
       // Get all teams for this pairing (typically 2 teams)
       const pairingTeamIds = pairingTeams
         ?.filter((pt: any) => pt.pairing_id === matchPairing.id)
         .map((pt: any) => pt.team_id) || [];
-      
+
       // Build players array
       allPlayers = pairingTeamIds.flatMap((teamId: number) => {
         return teamMembers
@@ -1315,6 +1317,7 @@ export async function getRefereeMatchDetails(c: Context<AuthContext>) {
       data: {
         match_id: match.id,
         tournament_name: tournament.name,
+        gameId: tournament.game_id,
         round: match.round,
         status: match.status,
         winner_team_id: match.winner_team_id,
@@ -2198,7 +2201,7 @@ async function verifyHost(tournamentId: number, playerId: number | string): Prom
     .select("host_id")
     .eq("id", tournamentId)
     .single();
-  
+
   return tournament?.host_id === playerIdNum;
 }
 
@@ -2213,7 +2216,7 @@ export async function getEngineInfo(c: Context<AuthContext>) {
     }
 
     const info = await getTournamentInfo(tournamentId);
-    
+
     if (!info) {
       throw new HTTPException(404, { message: "Tournament not found" });
     }
@@ -2236,7 +2239,7 @@ export async function getEngineStandings(c: Context<AuthContext>) {
     }
 
     const standings = await getStandings(tournamentId);
-    
+
     return c.json({ data: { standings } });
   } catch (error) {
     if (error instanceof HTTPException) throw error;
@@ -2255,7 +2258,7 @@ export async function getEngineTeams(c: Context<AuthContext>) {
     }
 
     const result = await getRegisteredTeams(tournamentId);
-    
+
     return c.json({ data: result });
   } catch (error) {
     if (error instanceof HTTPException) throw error;
@@ -2280,7 +2283,7 @@ export async function getEngineMatches(c: Context<AuthContext>) {
     } : undefined;
 
     const matches = await getMatches(tournamentId, filter);
-    
+
     return c.json({ data: { matches } });
   } catch (error) {
     if (error instanceof HTTPException) throw error;
@@ -2299,7 +2302,7 @@ export async function getEngineNextAction(c: Context<AuthContext>) {
     }
 
     const nextAction = await getNextAction(tournamentId);
-    
+
     return c.json({ data: nextAction });
   } catch (error) {
     if (error instanceof HTTPException) throw error;
@@ -2325,7 +2328,7 @@ export async function engineInitializeGroups(c: Context<AuthContext>) {
     }
 
     const result = await initializeGroups(tournamentId, body.numberOfGroups);
-    
+
     if (!result.success) {
       throw new HTTPException(400, { message: result.message });
     }
@@ -2354,7 +2357,7 @@ export async function engineStartNextRound(c: Context<AuthContext>) {
     }
 
     const result = await startNextRound(tournamentId);
-    
+
     if (!result.success) {
       throw new HTTPException(400, { message: result.message });
     }
@@ -2389,7 +2392,7 @@ export async function engineSwapTeam(c: Context<AuthContext>) {
       body.fromGroup,
       body.toGroup
     );
-    
+
     if (!result.success) {
       throw new HTTPException(400, { message: result.message });
     }
@@ -2418,7 +2421,7 @@ export async function engineReset(c: Context<AuthContext>) {
     }
 
     const result = await resetGroups(tournamentId);
-    
+
     if (!result.success) {
       throw new HTTPException(400, { message: result.message });
     }
@@ -2447,7 +2450,7 @@ export async function engineSetAllWinners(c: Context<AuthContext>) {
     }
 
     const result = await setAllTeam1Winners(tournamentId);
-    
+
     return c.json({ data: result });
   } catch (error) {
     if (error instanceof HTTPException) throw error;
@@ -2497,7 +2500,7 @@ export async function engineSetMatchWinner(c: Context<AuthContext>) {
     }
 
     const result = await setMatchWinner(matchId, body.winnerTeamId);
-    
+
     if (!result.success) {
       throw new HTTPException(400, { message: result.message });
     }

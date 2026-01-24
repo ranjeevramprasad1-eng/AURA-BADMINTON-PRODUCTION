@@ -135,22 +135,26 @@ export const matchesApi = {
 
   // POST /matches/:id/start - Start a match with positions
   start: (id, data) => {
-    return apiClient.post(`/matches/${id}/start`, data);
+    // Redirect to new scoring engine (scoring.ts)
+    return apiClient.post(`/match/start`, { ...data, match_id: parseInt(id) });
   },
 
   // GET /matches/:id/state - Get current match state
   getState: (id) => {
-    return apiClient.get(`/matches/${id}/state`);
+    // Redirect to new scoring engine (scoring.ts)
+    return apiClient.get(`/match/${id}`);
   },
 
   // POST /matches/:id/point - Record a point
   recordPoint: (id, data) => {
-    return apiClient.post(`/matches/${id}/point`, data);
+    // Redirect to new scoring engine (scoring.ts)
+    return apiClient.post(`/match/point`, { ...data, match_id: parseInt(id) });
   },
 
   // POST /matches/:id/undo - Undo last point
   undo: (id) => {
-    return apiClient.post(`/matches/${id}/undo`, {});
+    // Redirect to new scoring engine (scoring.ts)
+    return apiClient.post(`/match/undo`, { match_id: parseInt(id) });
   },
 
   // GET /matches/referee - Get matches assigned to current user as referee
@@ -158,7 +162,6 @@ export const matchesApi = {
     return apiClient.get("/matches/referee");
   },
 };
-
 // Pairings API
 export const pairingsApi = {
   // POST /pairings/generate-round - Generate pairings for the next round

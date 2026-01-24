@@ -24,6 +24,7 @@ import { friendsRoutes } from "@/routes/friends.routes";
 import { notificationsRoutes } from "@/routes/notifications.routes";
 import { gamesRoutes } from "@/routes/games.routes";
 import { env } from "./config/env";
+import matchRoutes from "@/lib/scoring";
 
 const app = new Hono()
   .basePath("/api")
@@ -58,6 +59,7 @@ const app = new Hono()
   .route("/friends", friendsRoutes)
   .route("/notifications", notificationsRoutes)
   .route("/games", gamesRoutes)
+  .route("/match", matchRoutes)
   .onError(errorHandler);
 
 showRoutes(app, {
