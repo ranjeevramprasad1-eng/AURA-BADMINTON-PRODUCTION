@@ -112,20 +112,58 @@ export default function ProfilePage() {
     .map(t => t.id || t.tournament_id);
 
   // WebSocket connections for tournament updates
+  // 1. User WebSocket Connection
+  useEffect(() => {
+    if (!userData?.id) return;
+
+    const userId = userData.id;
+    const wsKey = `user-${userId}`;
+
+    // Connect if not already connected
+    if (!wsConnectionsRef.current[wsKey]) {
+      const ws = createWebSocketConnection(`/ws/user/${userId}/updates`, {
+        onMessage: (data) => {
+          if (data.type === "referee_assignment") {
+            // Refresh referee queries when assigned
+            queryClient.invalidateQueries({ queryKey: ["referee-matches"] });
+            queryClient.invalidateQueries({ queryKey: ["referee-tournaments"] });
+            // Also refresh user details to ensure referee lists are up to date
+            queryClient.invalidateQueries({ queryKey: ["user", "details"] });
+          }
+        },
+        reconnect: true,
+      });
+      wsConnectionsRef.current[wsKey] = ws;
+    }
+
+    return () => {
+      // Cleanup user connection on unmount or user change
+      if (wsConnectionsRef.current[wsKey]) {
+        wsConnectionsRef.current[wsKey].close();
+        delete wsConnectionsRef.current[wsKey];
+      }
+    };
+  }, [userData?.id, queryClient]);
+
+  // 2. Tournament WebSocket Connections
   useEffect(() => {
     if (!activeTournamentIds || activeTournamentIds.length === 0) return;
 
-    // Clean up connections for tournaments that are no longer relevant
-    Object.keys(wsConnectionsRef.current).forEach(id => {
-      if (!activeTournamentIds.includes(Number(id))) {
-        if (wsConnectionsRef.current[id]) {
-          wsConnectionsRef.current[id].close();
-          delete wsConnectionsRef.current[id];
+    // Clean up connections for tournaments that are no longer active
+    Object.keys(wsConnectionsRef.current).forEach(key => {
+      // Skip user connections
+      if (key.startsWith('user-')) return;
+
+      const tournamentId = Number(key);
+      if (!activeTournamentIds.includes(tournamentId)) {
+        if (wsConnectionsRef.current[key]) {
+          wsConnectionsRef.current[key].close();
+          delete wsConnectionsRef.current[key];
         }
       }
     });
 
-    // Create new connections
+    // Create new connections for active tournaments
     activeTournamentIds.forEach(id => {
       if (wsConnectionsRef.current[id]) return; // Already connected
 
@@ -142,12 +180,20 @@ export default function ProfilePage() {
       });
       wsConnectionsRef.current[id] = ws;
     });
+
+    // Cleanup function for this effect - ONLY closes tournament connections when component unmounts
+    // (We don't want to close them on every dependency change, that's handled by the diffing logic above)
   }, [activeTournamentIds.join(','), queryClient]);
 
-  // Global cleanup
+  // Global cleanup on unmount
   useEffect(() => {
     return () => {
-      Object.values(wsConnectionsRef.current).forEach(ws => ws && ws.close());
+      Object.keys(wsConnectionsRef.current).forEach(key => {
+        if (wsConnectionsRef.current[key]) {
+          wsConnectionsRef.current[key].close();
+        }
+      });
+      wsConnectionsRef.current = {};
     };
   }, []);
 
@@ -265,6 +311,21 @@ export default function ProfilePage() {
 
   // Get all hosted tournaments
   const allHostedTournaments = hostedData?.tournaments || [];
+
+  // Filter Referee Items
+  const liveRefereeMatches = allRefereeMatches.filter(m => {
+    // Check if tournament ended
+    if (m.tournament && hasTournamentEnded(m.tournament)) return false;
+    return m.status !== "completed";
+  });
+
+  const pastRefereeMatches = allRefereeMatches.filter(m => {
+    if (m.tournament && hasTournamentEnded(m.tournament)) return true;
+    return m.status === "completed";
+  });
+
+  const liveRefereeTournaments = allRefereeTournaments.filter(t => !hasTournamentEnded(t));
+  const pastRefereeTournaments = allRefereeTournaments.filter(t => hasTournamentEnded(t));
 
   return (
     <ScrollablePage className="bg-background">
@@ -926,144 +987,189 @@ export default function ProfilePage() {
               )}
             </TabsContent>
 
-            {/* Referee Matches Tab */}
             <TabsContent value="referee" className="space-y-4 mt-0">
-              {isLoadingRefereeMatches || isLoadingReferee ? (
-                <div className="space-y-3">
-                  <div className="h-32 w-full bg-muted/40 animate-pulse rounded-xl" />
-                  <div className="h-32 w-full bg-muted/40 animate-pulse rounded-xl" />
-                </div>
-              ) : allRefereeMatches.length > 0 ? (
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Zap className="size-4 text-primary" />
-                    <h4 className="text-xs font-black uppercase tracking-widest text-muted-foreground">
-                      Matches to Officiate
-                    </h4>
-                  </div>
-                  {allRefereeMatches.map((match) => (
-                    <Card
-                      key={match.id}
-                      className="py-0 overflow-hidden border-border/50"
+              <Tabs defaultValue="live" className="w-full">
+                <div className="flex justify-end">
+                  <TabsList className="bg-muted/20 rounded-lg mb-4 grid grid-cols-2 border p-0">
+                    <TabsTrigger
+                      value="live"
+                      className="text-xs border-0 rounded-r-none border-r border-border px-2 font-bold uppercase data-[state=active]:text-primary data-[state=active]:shadow-none transition-all"
                     >
-                      <div className="flex">
-                        {/* Status Indicator */}
-                        <div
-                          className={`w-1.5 ${match.status === "in_progress"
-                            ? "bg-red-500"
-                            : match.status === "completed"
-                              ? "bg-green-500"
-                              : "bg-yellow-500"
-                            }`}
-                        />
+                      Live
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="past"
+                      className="text-xs px-2 font-bold uppercase data-[state=active]:text-primary data-[state=active]:shadow-none bg-transparent transition-all"
+                    >
+                      Past
+                    </TabsTrigger>
+                  </TabsList>
+                </div>
 
-                        <div className="flex-1 p-3">
-                          {/* Header */}
-                          <div className="flex justify-between items-center mb-2">
-                            <div className="flex flex-col gap-0.5">
-                              <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
-                                {match.tournament?.name || "Tournament"}
-                              </span>
-                              <span className="text-xs font-bold uppercase text-primary">
-                                {match.round}
-                              </span>
-                            </div>
-                            <span
-                              className={`text-[10px] font-black px-2 py-0.5 rounded uppercase ${match.status === "in_progress"
-                                ? "bg-red-500/10 text-red-600 animate-pulse"
-                                : match.status === "completed"
-                                  ? "bg-green-500/10 text-green-600"
-                                  : "bg-yellow-500/10 text-yellow-600"
-                                }`}
-                            >
-                              {match.status === "in_progress"
-                                ? "LIVE"
-                                : match.status === "completed"
-                                  ? "DONE"
-                                  : "PENDING"}
-                            </span>
-                          </div>
-
-                          {/* Players/Teams */}
-                          <div className="flex items-center justify-between mb-3">
-                            <div className="text-sm font-medium truncate flex-1">
-                              {match.players?.length > 0
-                                ? match.players
-                                  .map((p) => p.username)
-                                  .join(" & ")
-                                  .substring(0, 30) +
-                                (match.players.length > 2 ? "..." : "")
-                                : "Teams TBD"}
-                            </div>
-                            {match.scores && (
-                              <div className="flex items-center gap-2 font-mono font-bold text-lg">
-                                <span>{match.scores.teamA || 0}</span>
-                                <span className="text-muted-foreground/30">
-                                  -
-                                </span>
-                                <span>{match.scores.teamB || 0}</span>
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Action Button */}
-                          <Link
-                            className={buttonVariants({
-                              variant:
-                                match.status === "completed"
-                                  ? "outline"
-                                  : "default",
-                              className: "w-full gap-2 font-bold",
-                              size: "sm",
-                            })}
-                            href={`/tournaments/referee/${match.tournament_id}/${match.round}/${match.id}`}
-                          >
-                            {match.status === "in_progress" ? (
-                              <>
-                                <Zap className="size-4" /> Continue Scoring
-                              </>
-                            ) : match.status === "completed" ? (
-                              <>View Match</>
-                            ) : (
-                              <>
-                                <Zap className="size-4" /> Score Match
-                              </>
-                            )}
-                            <ChevronRight className="size-4" />
-                          </Link>
-                        </div>
+                {/* Live Referee Tab */}
+                <TabsContent value="live" className="space-y-4">
+                  {isLoadingRefereeMatches || isLoadingReferee ? (
+                    <div className="space-y-3">
+                      <div className="h-32 w-full bg-muted/40 animate-pulse rounded-xl" />
+                      <div className="h-32 w-full bg-muted/40 animate-pulse rounded-xl" />
+                    </div>
+                  ) : liveRefereeMatches.length > 0 ? (
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="size-2 rounded-full bg-red-500 animate-pulse" />
+                        <h4 className="text-xs font-black uppercase tracking-widest text-muted-foreground">
+                          Matches to Officiate
+                        </h4>
                       </div>
-                    </Card>
-                  ))}
-                </div>
-              ) : allRefereeTournaments.length > 0 ? (
-                <div className="space-y-3">
-                  <p className="text-xs text-muted-foreground text-center mb-4">
-                    No matches yet. Waiting for host to start rounds.
-                  </p>
-                  {allRefereeTournaments.map((tournament, index) => (
-                    <Link
-                      key={tournament.id}
-                      href={`/tournaments/${tournament.id}`}
-                      className="cursor-pointer"
-                    >
-                      <TournamentCard tournament={tournament} index={index} />
-                    </Link>
-                  ))}
-                </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center py-12 text-center space-y-4 border-2 border-dashed border-border/50 rounded-2xl bg-muted/5">
-                  <div className="bg-muted/30 p-4 rounded-full">
-                    <Zap className="size-8 text-muted-foreground/30" />
-                  </div>
-                  <p className="text-muted-foreground text-sm font-medium">
-                    Not an official yet.
-                  </p>
-                  <p className="text-muted-foreground/60 text-xs">
-                    Ask a host to add you as a referee.
-                  </p>
-                </div>
-              )}
+                      {liveRefereeMatches.map((match) => (
+                        <Card
+                          key={match.id}
+                          className="py-0 overflow-hidden border-border/50"
+                        >
+                          <div className="flex">
+                            <div className="w-1.5 bg-yellow-500" />
+                            <div className="flex-1 p-3">
+                              <div className="flex justify-between items-center mb-2">
+                                <div className="flex flex-col gap-0.5">
+                                  <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+                                    {match.tournament?.name || "Tournament"}
+                                  </span>
+                                  <span className="text-xs font-bold uppercase text-primary">
+                                    {match.round}
+                                  </span>
+                                </div>
+                                <span className="text-[10px] font-black px-2 py-0.5 rounded uppercase bg-yellow-500/10 text-yellow-600">
+                                  PENDING
+                                </span>
+                              </div>
+
+                              <div className="flex items-center justify-between mb-3">
+                                <div className="text-sm font-medium truncate flex-1">
+                                  {match.players?.length > 0
+                                    ? match.players
+                                      .map((p) => p.username)
+                                      .join(" & ")
+                                      .substring(0, 30) +
+                                    (match.players.length > 2 ? "..." : "")
+                                    : "Teams TBD"}
+                                </div>
+                              </div>
+
+                              <Link
+                                className={buttonVariants({
+                                  variant: "default",
+                                  className: "w-full gap-2 font-bold",
+                                  size: "sm",
+                                })}
+                                href={`/tournaments/referee/${match.tournament_id}/${match.round}/${match.id}`}
+                              >
+                                <Zap className="size-4" /> Score Match
+                                <ChevronRight className="size-4" />
+                              </Link>
+                            </div>
+                          </div>
+                        </Card>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center py-12 text-center space-y-4 border-2 border-dashed border-border/50 rounded-2xl bg-muted/5">
+                      <div className="bg-muted/30 p-4 rounded-full">
+                        <Zap className="size-8 text-muted-foreground/30" />
+                      </div>
+                      <p className="text-muted-foreground text-sm font-medium">
+                        No active assignments.
+                      </p>
+                    </div>
+                  )}
+                </TabsContent>
+
+                {/* Past Referee Tab */}
+                <TabsContent value="past" className="space-y-4">
+                  {pastRefereeMatches.length > 0 ? (
+                    <div className="space-y-3">
+                      {pastRefereeMatches.map((match) => (
+                        <Card
+                          key={match.id}
+                          className="py-0 overflow-hidden border-border/50 opacity-80 hover:opacity-100 transition-opacity"
+                        >
+                          <div className="flex">
+                            <div className={`w-1.5 ${match.status === 'completed' ? 'bg-green-500' : 'bg-muted-foreground'}`} />
+                            <div className="flex-1 p-3">
+                              <div className="flex justify-between items-center mb-2">
+                                <div className="flex flex-col gap-0.5">
+                                  <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+                                    {match.tournament?.name || "Tournament"}
+                                  </span>
+                                  <span className="text-xs font-bold uppercase text-primary">
+                                    {match.round}
+                                  </span>
+                                </div>
+                                <span className={`text-[10px] font-black px-2 py-0.5 rounded uppercase ${match.status === 'completed' ? 'bg-green-500/10 text-green-600' : 'bg-muted text-muted-foreground'}`}>
+                                  {match.status === 'completed' ? 'DONE' : match.status}
+                                </span>
+                              </div>
+
+                              <div className="flex items-center justify-between mb-3">
+                                <div className="text-sm font-medium truncate flex-1">
+                                  {match.players?.length > 0
+                                    ? match.players
+                                      .map((p) => p.username)
+                                      .join(" & ")
+                                      .substring(0, 30)
+                                    : "Teams TBD"}
+                                </div>
+                                {match.scores && (
+                                  <div className="flex items-center gap-2 font-mono font-bold text-lg">
+                                    <span>{match.scores.teamA || 0}</span>
+                                    <span className="text-muted-foreground/30">-</span>
+                                    <span>{match.scores.teamB || 0}</span>
+                                  </div>
+                                )}
+                              </div>
+
+                              <Link
+                                className={buttonVariants({
+                                  variant: "outline",
+                                  className: "w-full gap-2 font-bold",
+                                  size: "sm",
+                                })}
+                                href={`/tournaments/referee/${match.tournament_id}/${match.round}/${match.id}`}
+                              >
+                                View Match
+                                <ChevronRight className="size-4" />
+                              </Link>
+                            </div>
+                          </div>
+                        </Card>
+                      ))}
+                    </div>
+                  ) : pastRefereeTournaments.length > 0 ? (
+                    <div className="space-y-3">
+                      <h4 className="text-xs font-black uppercase tracking-widest text-muted-foreground mb-2">
+                        Past Tournaments
+                      </h4>
+                      {pastRefereeTournaments.map((tournament, index) => (
+                        <Link
+                          key={tournament.id}
+                          href={`/tournaments/${tournament.id}`}
+                          className="cursor-pointer"
+                        >
+                          <TournamentCard tournament={tournament} index={index} />
+                        </Link>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center py-12 text-center space-y-4 border-2 border-dashed border-border/50 rounded-2xl bg-muted/5">
+                      <div className="bg-muted/30 p-4 rounded-full">
+                        <Trophy className="size-8 text-muted-foreground/30" />
+                      </div>
+                      <p className="text-muted-foreground text-sm font-medium">
+                        No past history.
+                      </p>
+                    </div>
+                  )}
+                </TabsContent>
+              </Tabs>
             </TabsContent>
           </Tabs>
         </div>

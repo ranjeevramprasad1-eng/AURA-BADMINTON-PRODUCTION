@@ -7,6 +7,8 @@ import {
   removeConnection,
   addTournamentConnection,
   removeTournamentConnection,
+  addUserConnection,
+  removeUserConnection,
 } from "@/lib/websocket";
 
 const websocketRoutes = new Hono();
@@ -197,6 +199,60 @@ websocketRoutes.get(
         } catch (error) {
           console.error(`❌ Error processing message for match ${matchId}:`, error);
           ws.send(JSON.stringify({ error: "Invalid message format" }));
+        }
+      },
+    };
+  })
+);
+
+// WebSocket route for user updates (notifications, requests)
+websocketRoutes.get(
+  "/user/:id/updates",
+  upgradeWebSocket((c) => {
+    const userId = parseInt(c.req.param("id"));
+
+    if (isNaN(userId)) {
+      return {
+        onError(error: any, ws: any) {
+          ws.send(JSON.stringify({ error: "Invalid user ID" }));
+          ws.close();
+        },
+      };
+    }
+
+    return {
+      onOpen(event: any, ws: any) {
+        console.log(`🔌 User ${userId} WebSocket opened`);
+        addUserConnection(userId, ws);
+
+        // Send connection confirmation
+        ws.send(JSON.stringify({
+          type: "connected",
+          userId,
+          message: "Connected to user updates"
+        }));
+      },
+
+      onClose(event: any, ws: any) {
+        console.log(`🔌 User ${userId} WebSocket closed`);
+        removeUserConnection(userId, ws);
+      },
+
+      onError(error: any, ws: any) {
+        console.error(`❌ User ${userId} WebSocket error:`, error);
+        removeUserConnection(userId, ws);
+      },
+
+      onMessage(event: any, ws: any) {
+        // User WS is primarily for server-to-client broadcasts
+        // But we can handle ping/pong for keepalive
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === "ping") {
+            ws.send(JSON.stringify({ type: "pong" }));
+          }
+        } catch (error) {
+          // Ignore parse errors
         }
       },
     };

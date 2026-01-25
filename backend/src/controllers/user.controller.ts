@@ -221,6 +221,7 @@ export async function getUserDetails(c: Context<AuthContext>) {
 
       return c.json({
         data: {
+          id: player.id,
           name: player.username,
           username: player.username,
           email: email,
@@ -237,6 +238,7 @@ export async function getUserDetails(c: Context<AuthContext>) {
       // No teams/matches found
       return c.json({
         data: {
+          id: player.id,
           name: player.username,
           username: player.username,
           email: email,

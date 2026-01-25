@@ -226,3 +226,76 @@ export function broadcastPairingsGenerated(tournamentId: number, round: string) 
 export function broadcastStandingsUpdate(tournamentId: number, standings: any) {
   broadcastTournamentUpdate(tournamentId, 'standings_update', { standings });
 }
+
+
+// ============================================================================
+// USER-LEVEL WEBSOCKET (for notifications, requests, etc.)
+// ============================================================================
+
+// Store WebSocket connections per user
+const userConnections = new Map<number, Set<any>>();
+
+/**
+ * Get or create the connections set for a user
+ */
+export function getUserConnections(userId: number): Set<any> {
+  if (!userConnections.has(userId)) {
+    userConnections.set(userId, new Set());
+  }
+  return userConnections.get(userId)!;
+}
+
+/**
+ * Add a WebSocket connection for a user
+ */
+export function addUserConnection(userId: number, ws: any) {
+  const connections = getUserConnections(userId);
+  connections.add(ws);
+  console.log(`🔌 Added user ${userId} WS connection. Total: ${connections.size}`);
+}
+
+/**
+ * Remove a WebSocket connection for a user
+ */
+export function removeUserConnection(userId: number, ws: any) {
+  const connections = userConnections.get(userId);
+  if (connections) {
+    connections.delete(ws);
+    console.log(`🔌 Removed user ${userId} WS connection. Remaining: ${connections.size}`);
+
+    // Clean up if no connections left
+    if (connections.size === 0) {
+      userConnections.delete(userId);
+    }
+  }
+}
+
+/**
+ * Broadcast update to a specific user
+ */
+export function broadcastUserUpdate(userId: number, type: string, data: any) {
+  const connections = userConnections.get(userId);
+
+  if (!connections || connections.size === 0) {
+    console.log(`📡 No user ${userId} connections to broadcast to`);
+    return;
+  }
+
+  const message = JSON.stringify({
+    type,
+    userId,
+    ...data,
+  });
+
+  connections.forEach((client) => {
+    if (client.readyState === 1) { // WebSocket.OPEN
+      try {
+        client.send(message);
+      } catch (error) {
+        console.error(`❌ Error sending user WS message:`, error);
+      }
+    }
+  });
+
+  console.log(`📡 Broadcasted user ${userId} ${type} to ${connections.size} client(s)`);
+}

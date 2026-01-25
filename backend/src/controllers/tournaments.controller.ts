@@ -25,7 +25,7 @@ import { getTournamentInfo, getStandings, getMatches, getNextAction, getRegister
 import { getTournamentRounds as getSortedRounds, parseRoundsFromMetadata } from "@/utils/rounds";
 import { POINTS_TO_WIN, type ScoreMetadata } from "@/lib/scoring";
 import { blended_point_prob, match_prob_with_beta_uncertainty } from "@/lib/ratingWinprobLogic";
-import { broadcastPairingsGenerated } from "@/lib/websocket";
+import { broadcastPairingsGenerated, broadcastUserUpdate } from "@/lib/websocket";
 
 // GET /tournaments - Get all tournaments with filtering
 export async function getAllTournaments(c: Context<AuthContext>) {
@@ -2063,7 +2063,7 @@ export async function addTournamentReferee(c: Context<AuthContext>) {
     // Verify user is the host
     const { data: tournament, error: tournamentError } = await supabase
       .from("tournaments")
-      .select("id, host_id")
+      .select("id, host_id, name")
       .eq("id", tournamentId)
       .single();
 
@@ -2115,6 +2115,12 @@ export async function addTournamentReferee(c: Context<AuthContext>) {
     if (insertError) {
       throw new HTTPException(500, { message: insertError.message });
     }
+
+    // Broadcast update to the assigned referee
+    broadcastUserUpdate(body.player_id, "referee_assignment", {
+      tournamentId,
+      tournamentName: tournament.name,
+    });
 
     return c.json(
       {
