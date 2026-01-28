@@ -7,6 +7,7 @@ export function useTournament(id, mini = false) {
     queryKey: ['tournament', id, mini],
     queryFn: async () => {
       const response = await tournamentsApi.getById(id, mini);
+      console.log(response.data.data);
       return response.data.data;
     },
     enabled: !!id,

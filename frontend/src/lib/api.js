@@ -128,6 +128,16 @@ export const tournamentsApi = {
 
 // Matches API
 export const matchesApi = {
+  // GET /matches - Get all matches (with optional filters)
+  getAll: (params = {}) => {
+    return apiClient.get('/matches', { params });
+  },
+
+  // GET /matches/:id - Get match by ID
+  getById: (id) => {
+    return apiClient.get(`/matches/${id}`);
+  },
+
   // PUT /matches/:id - Update match
   update: (id, data) => {
     return apiClient.put(`/matches/${id}`, data);
@@ -198,6 +208,20 @@ export const venuesApi = {
   // GET /venues - Get all venues
   getAll: () => {
     return apiClient.get('/venues');
+  },
+};
+
+// Courts API
+export const courtsApi = {
+  // GET /courts - Get all courts (optionally filtered by venue_id)
+  getAll: (venueId = null) => {
+    const params = venueId ? { venue_id: venueId } : {};
+    return apiClient.get('/courts', { params });
+  },
+
+  // GET /courts/:id - Get court by ID
+  getById: (id) => {
+    return apiClient.get(`/courts/${id}`);
   },
 };
 

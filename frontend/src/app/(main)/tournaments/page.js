@@ -16,7 +16,6 @@ import {
 } from "@/components/layout/ScrollablePage";
 
 export default function HomePage() {
-  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState("active"); // "active" or "completed"
   const [selectedGameId, setSelectedGameId] = useState("");
@@ -154,15 +153,15 @@ export default function HomePage() {
         </header>
 
         {/* Search & Tabs */}
-        <div className="px-4 pt-4 pb-2 space-y-4">
-          <div className="relative group">
+        <div className="px-4 pt-4 pb-2 space-y-4 bg-background/95 backdrop-blur-sm ">
+          <div className="relative group border border-border rounded-xl ">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 size-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
             <Input
               type="text"
               placeholder="Search tournaments..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 h-11 bg-muted/40 border-transparent focus:bg-background focus:border-input transition-all rounded-xl"
+              className="pl-9 bg-muted/40 border-transparent focus:bg-background focus:border-input transition-all rounded-xl"
             />
           </div>
 
@@ -205,8 +204,8 @@ export default function HomePage() {
                   onClick={() => setSelectedGameId("")}
                   variant="outline"
                   className={`rounded-full h-8 text-[10px] font-bold uppercase tracking-wider border-2 shrink-0 transition-all duration-300 ${selectedGameId === ""
-                      ? "border-primary bg-primary/5 text-primary shadow-sm"
-                      : "border-dashed border-border/60 text-muted-foreground hover:border-primary/50 hover:text-foreground hover:bg-muted/30"
+                    ? "border-primary bg-primary/5 text-primary shadow-sm"
+                    : "border-dashed border-border/60 text-muted-foreground hover:border-primary/50 hover:text-foreground hover:bg-muted/30"
                     }`}
                 >
                   All
@@ -218,8 +217,8 @@ export default function HomePage() {
                     onClick={() => handleGameFilterClick(String(game.id))}
                     variant="outline"
                     className={`rounded-full h-8 text-[10px] font-bold uppercase tracking-wider border-2 shrink-0 transition-all duration-300 ${selectedGameId === String(game.id)
-                        ? "border-primary bg-primary/5 text-primary shadow-sm"
-                        : "border-dashed border-border/60 text-muted-foreground hover:border-primary/50 hover:text-foreground hover:bg-muted/30"
+                      ? "border-primary bg-primary/5 text-primary shadow-sm"
+                      : "border-dashed border-border/60 text-muted-foreground hover:border-primary/50 hover:text-foreground hover:bg-muted/30"
                       }`}
                   >
                     {game.name}
@@ -236,7 +235,7 @@ export default function HomePage() {
         <div className="absolute top-0 inset-x-0 h-48 bg-linear-to-b from-brand-blue/10 to-transparent skew-y-3 origin-top-left scale-110 pointer-events-none -z-10" />
         <div className="absolute top-0 right-0 size-64 bg-primary/5 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none -z-10" />
 
-        <div className="px-4 space-y-6">
+        <div className="px-4 space-y-6 ">
           {isLoading && (
             <div className="space-y-4 pt-2">
               {[1, 2, 3].map((i) => (
@@ -274,7 +273,7 @@ export default function HomePage() {
               {/* Date Groups */}
               {Object.keys(groupedTournaments.groups).map((dateKey) => (
                 <div key={dateKey} className="space-y-3">
-                  <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm py-2 -mx-4 px-4 border-b border-border/40">
+                  <div className="sticky -top-2 z-10 bg-background/95 backdrop-blur-sm py-2 -mx-4 px-4 border-b border-border/40">
                     <h3 className="text-sm font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
                       <CalendarDays className="size-4" />
                       {dateKey}

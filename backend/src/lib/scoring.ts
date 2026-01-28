@@ -107,19 +107,6 @@ export async function getMatchContext(matchId: number) {
     };
 }
 
-// Helper: Check if specific players belong to a team
-async function validatePlayersInTeam(teamId: number, playerIds: number[]) {
-    const { data: members, error } = await supabase
-        .from('team_members')
-        .select('player_id')
-        .eq('team_id', teamId);
-
-    if (error || !members) return false;
-
-    const dbMemberIds = members.map(m => m.player_id);
-    // Check if every requested player ID exists in the DB team members list
-    return playerIds.every(id => dbMemberIds.includes(id));
-}
 
 // ============================================================================
 // 1. START MATCH

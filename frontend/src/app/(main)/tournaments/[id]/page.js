@@ -175,7 +175,7 @@ export default function TournamentDetailsPage() {
                  <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-white to-transparent" />
              </div>
           )}
-          <div className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-transparent" />
+          <div className="absolute inset-0 bg-linear-to-t from-background via-background/60 to-transparent" />
           
           <div className="absolute bottom-0 left-0 right-0 p-6 z-10">
               <div className="flex items-center gap-2 mb-2">

@@ -139,11 +139,11 @@ export default function NotificationsPage() {
     <ScrollablePage>
       <ScrollablePageHeader>
         <header className="sticky top-0 bg-white border-b z-10">
-          <div className="flex items-center justify-between px-4 py-3">
+          <div className="grid grid-cols-3 items-center justify-between px-4 py-3">
             <Button variant="ghost" size="icon" onClick={() => router.back()}>
               <ArrowLeft className="size-5" />
             </Button>
-            <h1 className="text-lg font-bold">Notifications</h1>
+            <h1 className="text-lg font-bold text-center">Notifications</h1>
             <div className="flex items-center gap-2">
               {unreadCount > 0 && (
                 <Button

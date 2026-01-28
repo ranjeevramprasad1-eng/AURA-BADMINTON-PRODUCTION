@@ -9,8 +9,6 @@ import { Card } from "@/components/ui/card";
 import {
   ArrowLeft,
   MoreVertical,
-  ChevronLeft,
-  ChevronRight,
 } from "lucide-react";
 import { createWebSocketConnection } from "@/lib/websocket";
 import { toast } from "sonner";
@@ -29,14 +27,12 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer } fro
 export default function MatchDetailsPage() {
   const params = useParams();
   const router = useRouter();
-  const [currentSet, setCurrentSet] = useState(1);
   const [scoreA, setScoreA] = useState(0);
   const [scoreB, setScoreB] = useState(0);
   const [winRate, setWinRate] = useState(50);
   const [matchEnded, setMatchEnded] = useState(false);
   const [winnerTeamId, setWinnerTeamId] = useState(null);
   const [scoreHistory, setScoreHistory] = useState([]);
-  const [selectedTeam, setSelectedTeam] = useState(null); // null, "A", or "B"
   const [scoreAnimation, setScoreAnimation] = useState({
     teamA: false,
     teamB: false,
@@ -198,18 +194,6 @@ export default function MatchDetailsPage() {
     prevScoreB.current = scoreB;
   }, [scoreA, scoreB]);
 
-  const handleIncrement = (team) => {
-    if (matchEnded) {
-      toast.error("Match has ended. Cannot add more points.");
-      return;
-    }
-    if (wsConnectionRef.current) {
-      wsConnectionRef.current.send({
-        type: "increment",
-        team: team,
-      });
-    }
-  };
 
   // Prepare chart data from scores history (combines DB scores and real-time updates)
   // This hook must be called before any conditional returns
@@ -265,9 +249,6 @@ export default function MatchDetailsPage() {
 
   // Use WebSocket score state
   const currentScore = `${scoreA} - ${scoreB}`;
-
-  // Calculate total sets (assuming best of 3)
-  const totalSets = match_format?.total_rounds || 3;
 
   // Calculate max values for axes
   const maxRally = Math.max(chartData.length - 1, 0);

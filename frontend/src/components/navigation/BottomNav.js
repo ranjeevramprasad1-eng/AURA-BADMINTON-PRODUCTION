@@ -19,7 +19,7 @@ export function BottomNav() {
 
   // Unified nav items logic could be simplified, but keeping structure for now
   const navItems = [
-    { href: "/tournaments", icon: Trophy, label: "Tournaments" },
+    { href: "/tournaments", icon: Trophy, label: "Explore" },
     { href: "/friends", icon: Users, label: "Friends" },
     { href: "/notifications", icon: Bell, label: "Alerts", badge: unreadCount },
     { href: "/", icon: User, label: "Profile" }, // Home is Tournaments

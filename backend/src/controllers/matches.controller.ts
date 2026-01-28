@@ -12,9 +12,17 @@ import type {
   recordPointSchema,
 } from "@/utils/validation";
 // Import types and constants from scoring.ts
-import { POINTS_TO_WIN, WIN_BY, type ScoreMetadata } from "@/lib/scoring";
-import { update_player_ratings_in_db, blended_point_prob, match_prob_with_beta_uncertainty } from "@/lib/ratingWinprobLogic";
-import { broadcastMatchScore, broadcastMatchEnd, broadcastTournamentUpdate } from "@/lib/websocket";
+import { POINTS_TO_WIN, WIN_BY, type PickleballMetadata } from "@/lib/scoring";
+import {
+  update_player_ratings_in_db,
+  blended_point_prob,
+  match_prob_with_beta_uncertainty,
+} from "@/lib/ratingWinprobLogic";
+import {
+  broadcastMatchScore,
+  broadcastMatchEnd,
+  broadcastTournamentUpdate,
+} from "@/lib/websocket";
 
 // Helper: Verify teams and return IDs strictly (A = Lower ID, B = Higher ID)
 async function getMatchContext(matchId: number) {
@@ -53,7 +61,7 @@ async function getMatchContext(matchId: number) {
   }
 
   // Get positions from last score data (if match has started)
-  let positions: ScoreMetadata | null = null;
+  let positions: PickleballMetadata | null = null;
   const { data: lastScore, error: scoreErr } = await supabase
     .from("scores")
     .select("metadata")
@@ -63,7 +71,7 @@ async function getMatchContext(matchId: number) {
     .single();
 
   if (!scoreErr && lastScore && lastScore.metadata) {
-    positions = lastScore.metadata as ScoreMetadata;
+    positions = lastScore.metadata as PickleballMetadata;
   }
 
   return {
@@ -77,7 +85,7 @@ async function getMatchContext(matchId: number) {
 // Helper: Check if specific players belong to a team
 async function validatePlayersInTeam(
   teamId: number,
-  playerIds: number[]
+  playerIds: number[],
 ): Promise<boolean> {
   const { data: members, error } = await supabase
     .from("team_members")
@@ -118,7 +126,7 @@ export async function getAllMatches(c: Context<AuthContext>) {
           id,
           court_number
         )
-      `
+      `,
       )
       .order("created_at", { ascending: false });
 
@@ -180,7 +188,7 @@ export async function getMatchById(c: Context<AuthContext>) {
           id,
           court_number
         )
-      `
+      `,
       )
       .eq("id", matchId)
       .single();
@@ -190,7 +198,7 @@ export async function getMatchById(c: Context<AuthContext>) {
     }
 
     // Get pairings for this match
-    const { data: pairings } = await supabase
+    const { data: _pairings } = await supabase
       .from("pairings")
       .select(
         `
@@ -209,9 +217,31 @@ export async function getMatchById(c: Context<AuthContext>) {
             )
           )
         )
-      `
+      `,
       )
-      .eq("match_id", matchId);
+      .eq("match_id", matchId)
+      .single();
+
+    // Transform pairings to the desired format: [{ id: team_id, members: [...] }]
+    const teams =
+      _pairings?.pairing_teams?.map((pt: any) => {
+        const team = Array.isArray(pt.teams) ? pt.teams[0] : pt.teams;
+        const teamMembers = team?.team_members || [];
+
+        return {
+          id: pt.team_id,
+          members: teamMembers.map((tm: any) => {
+            const player = Array.isArray(tm.players)
+              ? tm.players[0]
+              : tm.players;
+            return {
+              id: player?.id,
+              username: player?.username,
+              photo_url: player?.photo_url,
+            };
+          }),
+        };
+      }) || [];
 
     // Get scores
     const { data: scores } = await supabase
@@ -220,12 +250,14 @@ export async function getMatchById(c: Context<AuthContext>) {
       .eq("match_id", matchId)
       .order("created_at", { ascending: true });
 
+    const result = {
+      ...match,
+      teams: teams,
+      scores: scores || [],
+    };
+
     return c.json({
-      data: {
-        ...match,
-        pairings: pairings || [],
-        scores: scores || [],
-      },
+      data: result,
     });
   } catch (error) {
     if (error instanceof HTTPException) {
@@ -263,7 +295,7 @@ export async function getTournamentMatches(c: Context<AuthContext>) {
           id,
           court_number
         )
-      `
+      `,
       )
       .eq("tournament_id", tournamentId)
       .order("round", { ascending: true })
@@ -617,7 +649,7 @@ export async function startMatch(c: Context<AuthContext>) {
     }
 
     // Create metadata for positions
-    const metadata: ScoreMetadata = {
+    const metadata: PickleballMetadata = {
       team_a_pos: {
         right_player_id: body.positions.pos_1,
         left_player_id: body.positions.pos_2,
@@ -741,7 +773,7 @@ export async function recordPoint(c: Context<AuthContext>) {
     let newScoreB = current.team_b_score;
     let servingTeam = current.serving_team_id;
     let sequence = current.server_sequence;
-    let metadata = current.metadata as ScoreMetadata;
+    let metadata = current.metadata as PickleballMetadata;
 
     const isServerWinner = servingTeam === body.rally_winner_team_id;
 
@@ -812,11 +844,11 @@ export async function recordPoint(c: Context<AuthContext>) {
 
       const teamA_ids = [
         Number(metadata.team_a_pos.right_player_id),
-        Number(metadata.team_a_pos.left_player_id)
+        Number(metadata.team_a_pos.left_player_id),
       ];
       const teamB_ids = [
         Number(metadata.team_b_pos.right_player_id),
-        Number(metadata.team_b_pos.left_player_id)
+        Number(metadata.team_b_pos.left_player_id),
       ];
 
       await update_player_ratings_in_db(
@@ -824,7 +856,7 @@ export async function recordPoint(c: Context<AuthContext>) {
         teamA_ids,
         teamB_ids,
         newScoreA,
-        newScoreB
+        newScoreB,
       );
       console.log(`[Match ${matchId}] Completed. Ratings updated.`);
 
@@ -841,10 +873,10 @@ export async function recordPoint(c: Context<AuthContext>) {
 
       if (matchData?.tournament_id) {
         // Notify all clients subscribed to this tournament to refresh standings
-        broadcastTournamentUpdate(matchData.tournament_id, 'standings_update', {
+        broadcastTournamentUpdate(matchData.tournament_id, "standings_update", {
           matchId,
           winnerId,
-          scores: { teamA: newScoreA, teamB: newScoreB }
+          scores: { teamA: newScoreA, teamB: newScoreB },
         });
       }
     }
@@ -852,25 +884,25 @@ export async function recordPoint(c: Context<AuthContext>) {
     // --- Live Score Calculation & Logging ---
     const tA_ids = [
       Number(metadata.team_a_pos.right_player_id),
-      Number(metadata.team_a_pos.left_player_id)
+      Number(metadata.team_a_pos.left_player_id),
     ];
     const tB_ids = [
       Number(metadata.team_b_pos.right_player_id),
-      Number(metadata.team_b_pos.left_player_id)
+      Number(metadata.team_b_pos.left_player_id),
     ];
     const allIds = [...tA_ids, ...tB_ids];
 
     const { data: ratingData } = await supabase
-      .from('ratings')
-      .select('player_id, aura_mu, aura_sigma')
-      .in('player_id', allIds);
+      .from("ratings")
+      .select("player_id, aura_mu, aura_sigma")
+      .in("player_id", allIds);
 
     const getStat = (id: number) => {
-      const r = ratingData?.find(x => x.player_id === id);
+      const r = ratingData?.find((x) => x.player_id === id);
       return {
         id,
         mu: r?.aura_mu ?? 25.0,
-        sigma: r?.aura_sigma ?? 8.33
+        sigma: r?.aura_sigma ?? 8.33,
       };
     };
 
@@ -878,23 +910,44 @@ export async function recordPoint(c: Context<AuthContext>) {
     const teamB_stats = tB_ids.map(getStat);
 
     const muA = (teamA_stats[0].mu + teamA_stats[1].mu) / 2;
-    const sigmaA = Math.sqrt((Math.pow(teamA_stats[0].sigma, 2) + Math.pow(teamA_stats[1].sigma, 2)) / 2);
+    const sigmaA = Math.sqrt(
+      (Math.pow(teamA_stats[0].sigma, 2) + Math.pow(teamA_stats[1].sigma, 2)) /
+        2,
+    );
     const muB = (teamB_stats[0].mu + teamB_stats[1].mu) / 2;
-    const sigmaB = Math.sqrt((Math.pow(teamB_stats[0].sigma, 2) + Math.pow(teamB_stats[1].sigma, 2)) / 2);
+    const sigmaB = Math.sqrt(
+      (Math.pow(teamB_stats[0].sigma, 2) + Math.pow(teamB_stats[1].sigma, 2)) /
+        2,
+    );
 
     const p_blend = blended_point_prob(
-      muA, sigmaA, muB, sigmaB,
-      newScoreA, newScoreB, POINTS_TO_WIN
+      muA,
+      sigmaA,
+      muB,
+      sigmaB,
+      newScoreA,
+      newScoreB,
+      POINTS_TO_WIN,
     );
 
     const win_prob_A = match_prob_with_beta_uncertainty(
-      p_blend, newScoreA, newScoreB, POINTS_TO_WIN
+      p_blend,
+      newScoreA,
+      newScoreB,
+      POINTS_TO_WIN,
     );
 
-    console.log(`[Match ${matchId}] Point: ${newScoreA}-${newScoreB}. Win Prob Team A: ${(win_prob_A * 100).toFixed(1)}%`);
+    console.log(
+      `[Match ${matchId}] Point: ${newScoreA}-${newScoreB}. Win Prob Team A: ${(win_prob_A * 100).toFixed(1)}%`,
+    );
 
     // Broadcast score update to all connected WebSocket clients
-    broadcastMatchScore(matchId, newScoreA, newScoreB, Number((win_prob_A * 100).toFixed(1)));
+    broadcastMatchScore(
+      matchId,
+      newScoreA,
+      newScoreB,
+      Number((win_prob_A * 100).toFixed(1)),
+    );
 
     return c.json({
       data: {
@@ -987,7 +1040,7 @@ export async function undoMatch(c: Context<AuthContext>) {
     // Revert match status logic
     const scoreA = current.team_a_score;
     const scoreB = current.team_b_score;
-    const metadata = current.metadata as ScoreMetadata;
+    const metadata = current.metadata as PickleballMetadata;
 
     const isWinA = scoreA >= POINTS_TO_WIN && scoreA - scoreB >= WIN_BY;
     const isWinB = scoreB >= POINTS_TO_WIN && scoreB - scoreA >= WIN_BY;
@@ -1007,25 +1060,25 @@ export async function undoMatch(c: Context<AuthContext>) {
     // --- Live Score Calculation & Logging (same as recordPoint) ---
     const tA_ids = [
       Number(metadata.team_a_pos.right_player_id),
-      Number(metadata.team_a_pos.left_player_id)
+      Number(metadata.team_a_pos.left_player_id),
     ];
     const tB_ids = [
       Number(metadata.team_b_pos.right_player_id),
-      Number(metadata.team_b_pos.left_player_id)
+      Number(metadata.team_b_pos.left_player_id),
     ];
     const allIds = [...tA_ids, ...tB_ids];
 
     const { data: ratingData } = await supabase
-      .from('ratings')
-      .select('player_id, aura_mu, aura_sigma')
-      .in('player_id', allIds);
+      .from("ratings")
+      .select("player_id, aura_mu, aura_sigma")
+      .in("player_id", allIds);
 
     const getStat = (id: number) => {
-      const r = ratingData?.find(x => x.player_id === id);
+      const r = ratingData?.find((x) => x.player_id === id);
       return {
         id,
         mu: r?.aura_mu ?? 25.0,
-        sigma: r?.aura_sigma ?? 8.33
+        sigma: r?.aura_sigma ?? 8.33,
       };
     };
 
@@ -1033,23 +1086,44 @@ export async function undoMatch(c: Context<AuthContext>) {
     const teamB_stats = tB_ids.map(getStat);
 
     const muA = (teamA_stats[0].mu + teamA_stats[1].mu) / 2;
-    const sigmaA = Math.sqrt((Math.pow(teamA_stats[0].sigma, 2) + Math.pow(teamA_stats[1].sigma, 2)) / 2);
+    const sigmaA = Math.sqrt(
+      (Math.pow(teamA_stats[0].sigma, 2) + Math.pow(teamA_stats[1].sigma, 2)) /
+        2,
+    );
     const muB = (teamB_stats[0].mu + teamB_stats[1].mu) / 2;
-    const sigmaB = Math.sqrt((Math.pow(teamB_stats[0].sigma, 2) + Math.pow(teamB_stats[1].sigma, 2)) / 2);
+    const sigmaB = Math.sqrt(
+      (Math.pow(teamB_stats[0].sigma, 2) + Math.pow(teamB_stats[1].sigma, 2)) /
+        2,
+    );
 
     const p_blend = blended_point_prob(
-      muA, sigmaA, muB, sigmaB,
-      scoreA, scoreB, POINTS_TO_WIN
+      muA,
+      sigmaA,
+      muB,
+      sigmaB,
+      scoreA,
+      scoreB,
+      POINTS_TO_WIN,
     );
 
     const win_prob_A = match_prob_with_beta_uncertainty(
-      p_blend, scoreA, scoreB, POINTS_TO_WIN
+      p_blend,
+      scoreA,
+      scoreB,
+      POINTS_TO_WIN,
     );
 
-    console.log(`[Match ${matchId}] Undo: ${scoreA}-${scoreB}. Win Prob Team A: ${(win_prob_A * 100).toFixed(1)}%`);
+    console.log(
+      `[Match ${matchId}] Undo: ${scoreA}-${scoreB}. Win Prob Team A: ${(win_prob_A * 100).toFixed(1)}%`,
+    );
 
     // Broadcast updated score after undo with win probability
-    broadcastMatchScore(matchId, scoreA, scoreB, Number((win_prob_A * 100).toFixed(1)));
+    broadcastMatchScore(
+      matchId,
+      scoreA,
+      scoreB,
+      Number((win_prob_A * 100).toFixed(1)),
+    );
 
     return c.json({
       data: {
@@ -1093,7 +1167,7 @@ export async function getMatchState(c: Context<AuthContext>) {
     }
 
     // Map back to flat positions for frontend convenience
-    const meta = current.metadata as ScoreMetadata;
+    const meta = current.metadata as PickleballMetadata;
 
     return c.json({
       data: {
@@ -1130,7 +1204,8 @@ export async function getRefereeMatches(c: Context<AuthContext>) {
       throw new HTTPException(500, { message: refError.message });
     }
 
-    const tournamentIds = refereeTournaments?.map((t: any) => t.tournament_id) || [];
+    const tournamentIds =
+      refereeTournaments?.map((t: any) => t.tournament_id) || [];
 
     if (tournamentIds.length === 0) {
       return c.json({ data: { matches: [] } });
@@ -1167,11 +1242,11 @@ export async function getRefereeMatches(c: Context<AuthContext>) {
           id,
           court_number
         )
-      `
+      `,
       )
       .in("tournament_id", tournamentIds)
       .eq("refree_id", playerId)
-      .neq("status", "bye")  // Filter out bye matches - they don't need refereeing
+      .neq("status", "bye") // Filter out bye matches - they don't need refereeing
       .order("start_time", { ascending: false });
 
     if (error) {
@@ -1198,7 +1273,8 @@ export async function getRefereeMatches(c: Context<AuthContext>) {
         .select("pairing_id, team_id")
         .in("pairing_id", pairingIds);
 
-      const teamIds = pairingTeams?.map((pt: any) => pt.team_id).filter(Boolean) || [];
+      const teamIds =
+        pairingTeams?.map((pt: any) => pt.team_id).filter(Boolean) || [];
 
       if (teamIds.length > 0) {
         const { data: teamMembers } = await supabase
@@ -1212,7 +1288,7 @@ export async function getRefereeMatches(c: Context<AuthContext>) {
               username,
               photo_url
             )
-          `
+          `,
           )
           .in("team_id", teamIds);
 
@@ -1225,49 +1301,63 @@ export async function getRefereeMatches(c: Context<AuthContext>) {
 
         // Build match details with players and scores
         const matchesWithDetails = matches?.map((match: any) => {
-          const matchPairings = pairings?.filter((p: any) => p.match_id === match.id) || [];
+          const matchPairings =
+            pairings?.filter((p: any) => p.match_id === match.id) || [];
           const matchPairingIds = matchPairings.map((p: any) => p.id);
-          const matchPairingTeams = pairingTeams?.filter((pt: any) =>
-            matchPairingIds.includes(pt.pairing_id)
-          ) || [];
+          const matchPairingTeams =
+            pairingTeams?.filter((pt: any) =>
+              matchPairingIds.includes(pt.pairing_id),
+            ) || [];
           const matchTeamIds = matchPairingTeams.map((pt: any) => pt.team_id);
 
           const players = matchTeamIds.flatMap((teamId: number) => {
-            return teamMembers
-              ?.filter((tm: any) => tm.team_id === teamId)
-              .map((tm: any) => {
-                const player = Array.isArray(tm.players) ? tm.players[0] : tm.players;
-                return {
-                  id: player?.id,
-                  username: player?.username,
-                  team_id: teamId,
-                };
-              }) || [];
+            return (
+              teamMembers
+                ?.filter((tm: any) => tm.team_id === teamId)
+                .map((tm: any) => {
+                  const player = Array.isArray(tm.players)
+                    ? tm.players[0]
+                    : tm.players;
+                  return {
+                    id: player?.id,
+                    username: player?.username,
+                    team_id: teamId,
+                  };
+                }) || []
+            );
           });
 
-          const matchScores = scores?.filter((s: any) => s.match_id === match.id) || [];
-          const latestScore = matchScores.length > 0
-            ? matchScores.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0]
-            : null;
+          const matchScores =
+            scores?.filter((s: any) => s.match_id === match.id) || [];
+          const latestScore =
+            matchScores.length > 0
+              ? matchScores.sort(
+                  (a: any, b: any) =>
+                    new Date(b.created_at).getTime() -
+                    new Date(a.created_at).getTime(),
+                )[0]
+              : null;
 
           const tournament = Array.isArray(match.tournaments)
             ? match.tournaments[0]
             : match.tournaments;
-          const court = Array.isArray(match.courts) ? match.courts[0] : match.courts;
+          const court = Array.isArray(match.courts)
+            ? match.courts[0]
+            : match.courts;
 
           return {
             id: match.id,
             tournament_id: match.tournament_id,
             tournament: tournament
               ? {
-                id: tournament.id,
-                name: tournament.name,
-                description: tournament.description,
-                image_url: tournament.image_url,
-                start_time: tournament.start_time,
-                end_time: tournament.end_time,
-                venue: tournament.venue,
-              }
+                  id: tournament.id,
+                  name: tournament.name,
+                  description: tournament.description,
+                  image_url: tournament.image_url,
+                  start_time: tournament.start_time,
+                  end_time: tournament.end_time,
+                  venue: tournament.venue,
+                }
               : null,
             round: match.round,
             status: match.status,
@@ -1277,9 +1367,9 @@ export async function getRefereeMatches(c: Context<AuthContext>) {
             players: players || [],
             scores: latestScore
               ? {
-                teamA: latestScore.team_a_score || 0,
-                teamB: latestScore.team_b_score || 0,
-              }
+                  teamA: latestScore.team_a_score || 0,
+                  teamB: latestScore.team_b_score || 0,
+                }
               : null,
           };
         });
@@ -1293,21 +1383,23 @@ export async function getRefereeMatches(c: Context<AuthContext>) {
       const tournament = Array.isArray(match.tournaments)
         ? match.tournaments[0]
         : match.tournaments;
-      const court = Array.isArray(match.courts) ? match.courts[0] : match.courts;
+      const court = Array.isArray(match.courts)
+        ? match.courts[0]
+        : match.courts;
 
       return {
         id: match.id,
         tournament_id: match.tournament_id,
         tournament: tournament
           ? {
-            id: tournament.id,
-            name: tournament.name,
-            description: tournament.description,
-            image_url: tournament.image_url,
-            start_time: tournament.start_time,
-            end_time: tournament.end_time,
-            venue: tournament.venue,
-          }
+              id: tournament.id,
+              name: tournament.name,
+              description: tournament.description,
+              image_url: tournament.image_url,
+              start_time: tournament.start_time,
+              end_time: tournament.end_time,
+              venue: tournament.venue,
+            }
           : null,
         round: match.round,
         status: match.status,

@@ -19,11 +19,11 @@ import type {
   engineMatchFilterSchema,
 } from "@/utils/validation";
 // Tournament Engine imports
-import { initializeGroups, resetGroups, swapTeamGroup, getTeamsFromInvites } from "@/lib/tournamentGroups";
+import { initializeGroups, resetGroups, swapTeamGroup } from "@/lib/tournamentGroups";
 import { startNextRound, setMatchWinner, setAllTeam1Winners } from "@/lib/tournamentRounds";
 import { getTournamentInfo, getStandings, getMatches, getNextAction, getRegisteredTeams } from "@/lib/tournamentStatus";
 import { getTournamentRounds as getSortedRounds, parseRoundsFromMetadata } from "@/utils/rounds";
-import { POINTS_TO_WIN, type ScoreMetadata } from "@/lib/scoring";
+import { POINTS_TO_WIN } from "@/lib/scoring";
 import { blended_point_prob, match_prob_with_beta_uncertainty } from "@/lib/ratingWinprobLogic";
 import { broadcastPairingsGenerated, broadcastUserUpdate } from "@/lib/websocket";
 
@@ -377,7 +377,6 @@ export async function getTournamentById(c: Context<AuthContext>) {
       eligibleGenderValue === "MW" ||
       (eligibleGenderValue === "M" && gender === "male") ||
       (eligibleGenderValue === "W" && gender === "female");
-    const eligible = isAgeEligible && isGenderEligible;
 
     // Fetch referees
     const { data: referees } = await supabase
@@ -420,8 +419,9 @@ export async function getTournamentById(c: Context<AuthContext>) {
         name: tournament.name,
         description: tournament.description || "",
         venue: {
-          name: venue?.name || "",
-          address: venue?.address || "",
+          id: venue?.id || null,
+          name: venue?.name || null,
+          address: venue?.address || null,
           geocoords: venue?.metadata?.geocoords || null,
         },
         registration_fee: tournament.registration_fee || 0,
@@ -994,7 +994,7 @@ export async function getMatchDetails(c: Context<AuthContext>) {
     // Calculate win probability if match has started (has scores with metadata)
     let win_prob_A: number | null = null;
     if (latestScore && latestScore.metadata) {
-      const metadata = latestScore.metadata as ScoreMetadata;
+      const metadata = latestScore.metadata;
       const scoreA = latestScore.team_a_score || 0;
       const scoreB = latestScore.team_b_score || 0;
 
@@ -1639,6 +1639,7 @@ export async function getCurrentRoundMatches(c: Context<AuthContext>) {
         id: match.id,
         status: match.status,
         court: match.courts?.court_number || null,
+        court_id: match.court_id || null,
         round: match.round,
         referee_id: match.refree_id,
         winner_team_id: match.winner_team_id,

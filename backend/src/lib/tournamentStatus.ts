@@ -48,6 +48,7 @@ export interface MatchDetails {
     winner_team_id: number | null;
     winner_name: string | null;
     referee_id: number | null;
+    court_id: number | null;
 }
 
 // ============================================================================
@@ -322,7 +323,7 @@ export async function getMatches(
 
     let query = supabase
         .from('matches')
-        .select('id, round, status, winner_team_id, refree_id')
+        .select('id, round, status, winner_team_id, refree_id, court_id')
         .eq('tournament_id', tournamentId)
         .order('id');
 
@@ -419,7 +420,8 @@ export async function getMatches(
             team2,
             winner_team_id: match.winner_team_id,
             winner_name: winnerName,
-            referee_id: (match as any).refree_id ?? null  // Note: DB column has typo "refree_id"
+            referee_id: (match as any).refree_id ?? null,  // Note: DB column has typo "refree_id"
+            court_id: (match as any).court_id ?? null
         });
     }
 

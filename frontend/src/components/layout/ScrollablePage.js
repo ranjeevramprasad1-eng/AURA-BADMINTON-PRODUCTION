@@ -27,7 +27,7 @@ export function ScrollablePage({ children, className }) {
   return (
     <div
       className={cn(
-        "flex flex-col h-[calc(100vh-4rem)] overflow-hidden",
+        "flex flex-col h-[calc(100vh-2.5rem)] overflow-hidden relative",
         className
       )}
     >
@@ -41,7 +41,7 @@ export function ScrollablePage({ children, className }) {
  */
 export function ScrollablePageHeader({ children, className }) {
   return (
-    <div className={cn("shrink-0", className)}>
+    <div className={cn("shrink-0 sticky top-0", className)}>
       {children}
     </div>
   );
@@ -52,7 +52,7 @@ export function ScrollablePageHeader({ children, className }) {
  */
 export function ScrollablePageContent({ children, className }) {
   return (
-    <div className={cn("flex-1 overflow-y-auto overflow-x-hidden", className)}>
+    <div className={cn("flex-1 overflow-y-scroll overflow-x-hidden scrollbar-none pb-24", className)}>
       {children}
     </div>
   );

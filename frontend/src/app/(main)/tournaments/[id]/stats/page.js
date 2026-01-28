@@ -18,7 +18,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Trophy, Users, Crown, Medal, ChevronRight, Zap, Target, Award } from "lucide-react";
+import { Trophy, Users, Crown, ChevronRight, Zap, Target, Award } from "lucide-react";
 import { getTournamentCategory } from "@/lib/utils";
 
 // Helper to format round name for display
@@ -97,7 +97,7 @@ function GroupStandings({ standings, engineInfo, matches, selectedRound, selecte
 
         {/* Champion Banner */}
         {championName && (
-          <Card className="overflow-hidden border-2 border-yellow-400 bg-gradient-to-r from-yellow-50 to-amber-50 dark:from-yellow-950/30 dark:to-amber-950/30">
+          <Card className="overflow-hidden border-2 border-yellow-400 bg-linear-to-r from-yellow-50 to-amber-50 dark:from-yellow-950/30 dark:to-amber-950/30">
             <CardContent className="p-4 flex items-center justify-center gap-3">
               <Trophy className="size-8 text-yellow-500" />
               <div className="text-center">
@@ -116,13 +116,13 @@ function GroupStandings({ standings, engineInfo, matches, selectedRound, selecte
 
           return (
             <Card key={round} className={`overflow-hidden ${isFinal
-              ? 'border-2 border-primary/50 bg-gradient-to-br from-primary/5 to-primary/10'
+              ? 'border-2 border-primary/50 bg-linear-to-br from-primary/5 to-primary/10'
               : isSemiFinal
                 ? 'border-blue-200 bg-blue-50/30 dark:bg-blue-950/10'
                 : ''
               }`}>
               <CardHeader className={`py-3 px-4 ${isFinal
-                ? 'bg-gradient-to-r from-primary/20 to-primary/10'
+                ? 'bg-linear-to-r from-primary/20 to-primary/10'
                 : isSemiFinal
                   ? 'bg-blue-100/50 dark:bg-blue-900/20'
                   : 'bg-muted/30'
@@ -277,7 +277,7 @@ function GroupStandings({ standings, engineInfo, matches, selectedRound, selecte
                 <>
                   {/* Champion Banner */}
                   {championName && (
-                    <Card className="overflow-hidden border-2 border-yellow-400 bg-gradient-to-r from-yellow-50 to-amber-50 dark:from-yellow-950/30 dark:to-amber-950/30 mb-4">
+                    <Card className="overflow-hidden border-2 border-yellow-400 bg-linear-to-r from-yellow-50 to-amber-50 dark:from-yellow-950/30 dark:to-amber-950/30 mb-4">
                       <CardContent className="p-4 flex items-center justify-center gap-3">
                         <Trophy className="size-8 text-yellow-500" />
                         <div className="text-center">
@@ -296,13 +296,13 @@ function GroupStandings({ standings, engineInfo, matches, selectedRound, selecte
 
                     return (
                       <Card key={round} className={`py-0 gap-0 overflow-hidden mb-3 ${isFinal
-                        ? 'border-2 border-primary/50 bg-gradient-to-br from-primary/5 to-primary/10'
+                        ? 'border-2 border-primary/50 bg-linear-to-br from-primary/5 to-primary/10'
                         : isSemiFinal
                           ? 'border-blue-200 bg-blue-50/30 dark:bg-blue-950/10'
                           : ''
                         }`}>
                         <CardHeader className={`py-3 px-4 ${isFinal
-                          ? 'bg-gradient-to-r from-primary/20 to-primary/10'
+                          ? 'bg-linear-to-r from-primary/20 to-primary/10'
                           : isSemiFinal
                             ? 'bg-blue-100/50 dark:bg-blue-900/20'
                             : 'bg-muted/30'
@@ -539,9 +539,9 @@ function MatchesList({ matches, stage, selectedRound, selectedGroup, tournamentI
     <div className="space-y-3">
       {filteredMatches.map((match) => {
         const team1Name = match.team1?.name || match.team1?.display_name ||
-          (match.team1?.team_id ? `Team ${match.team1.team_id}` : 'TBD');
+          (match.team1?.team_id ? `Team ${match.team1.team_id}` : 'BYE');
         const team2Name = match.team2?.name || match.team2?.display_name ||
-          (match.team2?.team_id ? `Team ${match.team2.team_id}` : 'TBD');
+          (match.team2?.team_id ? `Team ${match.team2.team_id}` : 'BYE');
         const matchId = match.match_id || match.id;
         const isLive = match.status === 'in_progress';
         const isComplete = match.status === 'completed';
@@ -550,7 +550,6 @@ function MatchesList({ matches, stage, selectedRound, selectedGroup, tournamentI
         const liveScores = realtimeScores?.[matchId];
         const scoreA = liveScores?.teamA ?? null;
         const scoreB = liveScores?.teamB ?? null;
-        const winRate = liveScores?.winRate ?? null;
 
         return (
           <Card
@@ -703,27 +702,6 @@ export default function TournamentStatsPage() {
   }, [tournament]);
 
   const isGroupKnockoutFormat = tournamentFormat === 'group_knockout' || isGroupKnockout;
-
-  // Generate rounds for Group+Knockout format - must be before conditional returns
-  const groupKnockoutRounds = useMemo(() => {
-    if (!isGroupKnockoutFormat || !engineInfo) return [];
-
-    const rounds = [];
-    const totalGroupRounds = engineInfo.total_group_rounds || 0;
-
-    // Add group stage rounds
-    for (let i = 1; i <= totalGroupRounds; i++) {
-      rounds.push(`${i}`);
-    }
-
-    // Add knockout rounds based on teams advancing
-    const teamsAdvancing = (engineInfo.number_of_groups || 2) * (engineInfo.teams_to_advance || 2);
-    if (teamsAdvancing >= 8) rounds.push('QF');
-    if (teamsAdvancing >= 4) rounds.push('SF');
-    rounds.push('F');
-
-    return rounds;
-  }, [isGroupKnockoutFormat, engineInfo]);
 
   // Get unique rounds from matches for Group+Knockout - must be before conditional returns
   const availableMatchRounds = useMemo(() => {
@@ -960,6 +938,8 @@ export default function TournamentStatsPage() {
             <TournamentStatsHeader
               tournamentName={tournament.name}
               category={category}
+              tournamentId={tournament.id}
+              venueId={tournament.venue?.id}
             />
             {/* Round Navigation */}
             <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm pb-2 pt-1 border-b border-border/50">
@@ -1007,7 +987,7 @@ export default function TournamentStatsPage() {
                             setSelectedMatchRound(round);
                             setSelectedGroup('all'); // No group filter for knockout
                           }}
-                          className={`text-xs font-bold shrink-0 ${round === 'F' ? 'bg-gradient-to-r from-yellow-500/10 to-amber-500/10 border-yellow-500/30' : ''
+                          className={`text-xs font-bold shrink-0 ${round === 'F' ? 'bg-linear-to-r from-yellow-500/10 to-amber-500/10 border-yellow-500/30' : ''
                             }`}
                         >
                           {round === 'F' && <Trophy className="size-3 mr-1" />}
@@ -1120,6 +1100,7 @@ export default function TournamentStatsPage() {
           <TournamentStatsHeader
             tournamentName={tournament.name}
             category={category}
+            venueId={tournament.venue?.id}
           />
           <div className="px-0 pb-2">
             <RoundNavigation

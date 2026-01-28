@@ -61,7 +61,7 @@ export function TournamentCard({ tournament, index }) {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, delay: index * 0.1, ease: "easeOut" }}
-      whileHover={{ y: -4, transition: { duration: 0.2 } }}
+      whileHover={{ y: -4, transition: { duration: 0.4 } }}
     >
       <Link href={`/tournaments/${id}`}>
         <Card className="py-0 overflow-hidden border-border/50 hover:border-primary/50 transition-all duration-300 shadow-sm hover:shadow-lg hover:shadow-primary/10 group">
