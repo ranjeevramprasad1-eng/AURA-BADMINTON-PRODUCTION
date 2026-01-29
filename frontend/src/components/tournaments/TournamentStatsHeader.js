@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { ArrowLeft, Maximize2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { courtsApi } from "@/lib/api";
 import { Loader2 } from "lucide-react";
+import Link from "next/link";
 
 export function TournamentStatsHeader({ tournamentName, category, tournamentId, venueId }) {
   const router = useRouter();
@@ -37,11 +38,6 @@ export function TournamentStatsHeader({ tournamentName, category, tournamentId, 
         });
     }
   }, [isDialogOpen, venueId]);
-
-  const handleCourtClick = (courtId) => {
-    setIsDialogOpen(false);
-    router.push(`/view/${tournamentId}/${courtId}`);
-  };
 
   return (
     <>
@@ -87,11 +83,10 @@ export function TournamentStatsHeader({ tournamentName, category, tournamentId, 
             ) : (
               <div className="space-y-2 max-h-[400px] overflow-y-auto">
                 {courts.map((court) => (
-                  <Button
+                  <Link
                     key={court.id}
-                    variant="outline"
-                    className="w-full justify-start h-auto py-4 px-4"
-                    onClick={() => handleCourtClick(court.id)}
+                    href={`/view/${tournamentId}/${court.id}`}
+                    className={buttonVariants({ variant: "outline", className: "w-full justify-start h-auto" })}
                   >
                     <div className="flex flex-col items-start w-full">
                       <span className="font-semibold text-base">
@@ -103,7 +98,7 @@ export function TournamentStatsHeader({ tournamentName, category, tournamentId, 
                         </span>
                       )}
                     </div>
-                  </Button>
+                  </Link>
                 ))}
               </div>
             )}

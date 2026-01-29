@@ -172,7 +172,7 @@ export default function TournamentDetailsPage() {
             />
           ) : (
              <div className="w-full h-full bg-linear-to-br from-brand-blue to-teal-600 relative flex items-center justify-center">
-                 <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-white to-transparent" />
+                 <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_center,var(--tw-gradient-stops))] from-white to-transparent" />
              </div>
           )}
           <div className="absolute inset-0 bg-linear-to-t from-background via-background/60 to-transparent" />
@@ -395,7 +395,7 @@ export default function TournamentDetailsPage() {
       </ScrollablePageContent>
 
       {/* Book Now / Show Stats Button */}
-      <div className="fixed bottom-0 left-0 right-0 p-4 z-50 bg-gradient-to-t from-background via-background to-transparent pt-12 pointer-events-none md:relative md:bg-transparent md:p-0">
+      <div className="fixed bottom-0 left-0 right-0 p-4 z-50 bg-linear-to-t from-background via-background to-transparent pt-12 pointer-events-none md:relative md:bg-transparent md:p-0">
         <div className="max-w-md mx-auto w-full space-y-2 pointer-events-auto pb-4">
           {isHost ? (
             <div className="w-full px-4 py-4 rounded-xl bg-primary/10 border border-primary/20 text-center">

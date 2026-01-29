@@ -153,7 +153,7 @@ export function useActiveCourtMatch(tournamentId, courtId, options = {}) {
   
   // Get the active match (in_progress or most recent)
   const activeMatch = matchesQuery.data?.find(
-    (m) => m.status === 'in_progress'
+    (m) => m.status === 'in_progress' && m.court_id === parseInt(courtId)
   ) || matchesQuery.data?.[0];
 
   // Fetch detailed match data if we have an active match
