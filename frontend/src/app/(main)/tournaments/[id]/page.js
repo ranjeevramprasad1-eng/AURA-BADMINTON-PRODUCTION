@@ -21,7 +21,6 @@ import {
   Clock,
   Calendar,
   Users,
-  Star,
   Zap,
 } from "lucide-react";
 import { formatTime, formatDateWithDay, getTournamentCategory } from "@/lib/utils";
@@ -197,7 +196,7 @@ export default function TournamentDetailsPage() {
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => router.back()}
+                onClick={() => router.push("/")}
                 className="rounded-full bg-background/20 backdrop-blur-md text-white hover:bg-background/40 hover:text-white"
               >
                 <ArrowLeft className="size-5" />
