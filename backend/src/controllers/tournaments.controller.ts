@@ -367,7 +367,7 @@ export async function getTournamentById(c: Context<AuthContext>) {
         username: player?.username,
         name: player?.username,
         photo_url: player?.photo_url,
-        aura: ratingsMap.get(player?.id) || null,
+        aura: ratingsMap.get(player?.id) || DEFAULT_MU,
       };
     });
 

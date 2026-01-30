@@ -3,12 +3,6 @@ import { env } from '../config/env';
 
 const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY);
 
-interface Player {
-  id: number;
-  username: string | null;
-  user_id: string;
-}
-
 interface Team {
   team_id: number;
 }
@@ -18,6 +12,10 @@ interface Registration {
   tournament_id: number;
   player_id: number;
 }
+
+const PLAYER_COUNT = 18; //without host and referee
+const GAME_ID = 2; //1: pickleball, 2: badminton
+
 
 /**
  * Creates a group mixed doubles tournament with 14 players
@@ -30,20 +28,20 @@ async function createGroupMensDoublesTournament() {
   try {
     console.log('🏸 Starting tournament creation...\n');
 
-    // Step 1: Fetch 14 players (12 for teams + 1 host + 1 referee)
-    console.log('📋 Fetching 14 players...');
+    // Step 1: Fetch players (PLAYER_COUNT for teams + 1 host + 1 referee)
+    console.log(`📋 Fetching ${PLAYER_COUNT + 2} players...`);
     const { data: players, error: playersError } = await supabase
       .from('players')
       .select('id, username, user_id')
-      .limit(14)
+      .limit(PLAYER_COUNT + 2)
       .order('id', { ascending: true });
 
     if (playersError) {
       throw new Error(`Failed to fetch players: ${playersError.message}`);
     }
 
-    if (!players || players.length < 14) {
-      throw new Error(`Not enough players. Found ${players?.length || 0}, need 14 (12 for teams + 1 host + 1 referee).`);
+    if (!players || players.length < PLAYER_COUNT + 2) {
+      throw new Error(`Not enough players. Found ${players?.length || 0}, need ${PLAYER_COUNT + 2} (PLAYER_COUNT for teams + 1 host + 1 referee).`);
     }
 
     console.log(`✅ Found ${players.length} players\n`);
@@ -70,7 +68,7 @@ async function createGroupMensDoublesTournament() {
     // Step 3: Assign roles
     const hostPlayer = players[0];
     const refereePlayer = players[1];
-    const playingPlayers = players.slice(2); // Remaining 12 players for 6 teams
+    const playingPlayers = players.slice(2); // Remaining PLAYER_COUNT players for teams
 
     console.log(`👑 Host: ${hostPlayer.username || `Player ${hostPlayer.id}`} (ID: ${hostPlayer.id})`);
     console.log(`⚖️  Referee: ${refereePlayer.username || `Player ${refereePlayer.id}`} (ID: ${refereePlayer.id})`);
@@ -110,7 +108,7 @@ async function createGroupMensDoublesTournament() {
       .from('tournaments')
       .select('id')
       .eq('name', tournamentName)
-      .eq('game_id', 2);
+      .eq('game_id', GAME_ID);
 
     if (checkError) {
       throw new Error(`Failed to check for existing tournament: ${checkError.message}`);
@@ -225,14 +223,14 @@ async function createGroupMensDoublesTournament() {
       .from('tournaments')
       .insert({
         host_id: hostPlayer.id,
-        game_id: 2, // 1: pickleball, 2: badminton
+        game_id: GAME_ID,
         name: tournamentName,
         description: 'Automated group stage mixed doubles tournament with 6 teams (12 players)',
         venue_id: venue.id,
         match_format_id: matchFormat.id,
         start_time: startTime.toISOString(),
         end_time: endTime.toISOString(),
-        capacity: 12, // 12 players (6 teams)
+        capacity: PLAYER_COUNT, // PLAYER_COUNT players (teams)
         registration_fee: 0,
         image_url: null,
         metadata: {
