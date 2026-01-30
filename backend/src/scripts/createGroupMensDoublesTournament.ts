@@ -15,6 +15,8 @@ interface Registration {
 
 const PLAYER_COUNT = 18; //without host and referee
 const GAME_ID = 2; //1: pickleball, 2: badminton
+const TOURNAMENT_NAME = 'Badminton Group Mixed Doubles Tournament';
+
 
 
 /**
@@ -102,12 +104,11 @@ async function createGroupMensDoublesTournament() {
     console.log(`✅ Created match format (ID: ${matchFormat.id})\n`);
 
     // Step 5: Check and delete existing tournament if it exists
-    const tournamentName = 'Badminton Group Mixed Doubles Tournament';
     console.log('🔍 Checking for existing tournament...');
     const { data: existingTournaments, error: checkError } = await supabase
       .from('tournaments')
       .select('id')
-      .eq('name', tournamentName)
+      .eq('name', TOURNAMENT_NAME)
       .eq('game_id', GAME_ID);
 
     if (checkError) {
@@ -224,7 +225,7 @@ async function createGroupMensDoublesTournament() {
       .insert({
         host_id: hostPlayer.id,
         game_id: GAME_ID,
-        name: tournamentName,
+        name: TOURNAMENT_NAME,
         description: 'Automated group stage mixed doubles tournament with 6 teams (12 players)',
         venue_id: venue.id,
         match_format_id: matchFormat.id,
