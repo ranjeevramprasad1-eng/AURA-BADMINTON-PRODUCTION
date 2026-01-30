@@ -1,4 +1,4 @@
-import { supabase } from './supabase'; // Ensure this path is correct for your project
+import { supabase } from "./supabase"; // Ensure this path is correct for your project
 
 // ==========================================
 // TYPES
@@ -15,6 +15,10 @@ interface RatingResult {
   teamB_new: PlayerStats[];
 }
 
+// Default starting stats
+export const DEFAULT_MU = 25.0;
+export const DEFAULT_SIGMA = 8.33;
+
 // ==========================================
 // INTERNAL MATH HELPERS
 // ==========================================
@@ -29,7 +33,8 @@ function erf(x: number): number {
   const a5 = 1.061405429;
   const p = 0.3275911;
   const t = 1.0 / (1.0 + p * x);
-  const y = 1.0 - (((((a5 * t + a4) * t + a3) * t + a2) * t + a1) * t * Math.exp(-x * x));
+  const y =
+    1.0 - ((((a5 * t + a4) * t + a3) * t + a2) * t + a1) * t * Math.exp(-x * x);
   return sign * y;
 }
 
@@ -38,14 +43,16 @@ function Phi(t: number): number {
 }
 
 function generateNormal(): number {
-  let u = 0, v = 0;
+  let u = 0,
+    v = 0;
   while (u === 0) u = Math.random();
   while (v === 0) v = Math.random();
   return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
 }
 
 function randomGamma(alpha: number, beta: number = 1): number {
-  if (alpha < 1) return randomGamma(1 + alpha, beta) * Math.pow(Math.random(), 1 / alpha);
+  if (alpha < 1)
+    return randomGamma(1 + alpha, beta) * Math.pow(Math.random(), 1 / alpha);
   const d = alpha - 1 / 3;
   const c = 1 / Math.sqrt(9 * d);
   while (true) {
@@ -57,7 +64,8 @@ function randomGamma(alpha: number, beta: number = 1): number {
     v = v * v * v;
     const u = Math.random();
     if (u < 1 - 0.0331 * x * x * x * x) return (d * v) / beta;
-    if (Math.log(u) < 0.5 * x * x + d * (1 - v + Math.log(v))) return (d * v) / beta;
+    if (Math.log(u) < 0.5 * x * x + d * (1 - v + Math.log(v)))
+      return (d * v) / beta;
   }
 }
 
@@ -81,14 +89,23 @@ function mean(arr: number[]): number {
 
 const memo = new Map<string, number>();
 
-function per_point_base_prob(muA: number, sigmaA: number, muB: number, sigmaB: number): number {
+function per_point_base_prob(
+  muA: number,
+  sigmaA: number,
+  muB: number,
+  sigmaB: number,
+): number {
   const combined_std = Math.sqrt(Math.pow(sigmaA, 2) + Math.pow(sigmaB, 2));
   if (combined_std === 0) return 0.5;
   const z = (muA - muB) / (Math.sqrt(2) * combined_std);
   return Phi(z);
 }
 
-function points_component(scoreA: number, scoreB: number, target: number = 11): number {
+function points_component(
+  scoreA: number,
+  scoreB: number,
+  target: number = 11,
+): number {
   const s = scoreA - scoreB;
   const remA = Math.max(0, target - scoreA);
   const remB = Math.max(0, target - scoreB);
@@ -96,12 +113,18 @@ function points_component(scoreA: number, scoreB: number, target: number = 11): 
   return 0.5 + 0.25 * tanh(s / (rem * 0.6));
 }
 
-function match_win_probability_fixed_p(p: number, a: number, b: number, target: number = 11, win_by: number = 2): number {
+function match_win_probability_fixed_p(
+  p: number,
+  a: number,
+  b: number,
+  target: number = 11,
+  win_by: number = 2,
+): number {
   const key = `${p.toFixed(4)}-${a}-${b}`;
   if (a >= target && a - b >= win_by) return 1.0;
   if (b >= target && b - a >= win_by) return 0.0;
   if (memo.has(key)) return memo.get(key)!;
-  
+
   // Deuce optimization
   if (a >= target - 1 && b >= target - 1) {
     const denom = p * p + (1 - p) * (1 - p);
@@ -109,15 +132,22 @@ function match_win_probability_fixed_p(p: number, a: number, b: number, target: 
     return (p * p) / denom;
   }
 
-  const res = p * match_win_probability_fixed_p(p, a + 1, b, target, win_by) +
-              (1 - p) * match_win_probability_fixed_p(p, a, b + 1, target, win_by);
+  const res =
+    p * match_win_probability_fixed_p(p, a + 1, b, target, win_by) +
+    (1 - p) * match_win_probability_fixed_p(p, a, b + 1, target, win_by);
   memo.set(key, res);
   return res;
 }
 
 export function blended_point_prob(
-  muA: number, sigmaA: number, muB: number, sigmaB: number,
-  scoreA: number, scoreB: number, target: number = 11, w_mu: number = 0.2
+  muA: number,
+  sigmaA: number,
+  muB: number,
+  sigmaB: number,
+  scoreA: number,
+  scoreB: number,
+  target: number = 11,
+  w_mu: number = 0.2,
 ): number {
   const base = per_point_base_prob(muA, sigmaA, muB, sigmaB);
   const pts = points_component(scoreA, scoreB, target);
@@ -125,7 +155,12 @@ export function blended_point_prob(
 }
 
 export function match_prob_with_beta_uncertainty(
-  p_blend: number, a: number, b: number, target: number = 11, phi: number = 5, n_samples: number = 50
+  p_blend: number,
+  a: number,
+  b: number,
+  target: number = 11,
+  phi: number = 5,
+  n_samples: number = 50,
 ): number {
   const alpha = Math.max(1e-6, p_blend * phi);
   const beta = Math.max(1e-6, (1 - p_blend) * phi);
@@ -147,7 +182,7 @@ export function calculate_new_ratings(
   teamB: PlayerStats[],
   scoreA: number,
   scoreB: number,
-  options: any = {}
+  options: any = {},
 ): RatingResult {
   const beta = options.beta ?? 4.1667;
   const tau = options.tau ?? 0.05;
@@ -161,18 +196,24 @@ export function calculate_new_ratings(
   // 1. Calculate Team Averages
   const muA = (teamA[0].mu + teamA[1].mu) / 2.0;
   const muB = (teamB[0].mu + teamB[1].mu) / 2.0;
-  const sigmaA = Math.sqrt((Math.pow(teamA[0].sigma, 2) + Math.pow(teamA[1].sigma, 2)) / 2.0);
-  const sigmaB = Math.sqrt((Math.pow(teamB[0].sigma, 2) + Math.pow(teamB[1].sigma, 2)) / 2.0);
+  const sigmaA = Math.sqrt(
+    (Math.pow(teamA[0].sigma, 2) + Math.pow(teamA[1].sigma, 2)) / 2.0,
+  );
+  const sigmaB = Math.sqrt(
+    (Math.pow(teamB[0].sigma, 2) + Math.pow(teamB[1].sigma, 2)) / 2.0,
+  );
 
   // 2. Probability of Team A winning based on skills
-  const denom = Math.sqrt(2.0 * (Math.pow(beta, 2) + Math.pow(sigmaA, 2) + Math.pow(sigmaB, 2)));
+  const denom = Math.sqrt(
+    2.0 * (Math.pow(beta, 2) + Math.pow(sigmaA, 2) + Math.pow(sigmaB, 2)),
+  );
   const t = (muA - muB) / denom;
   const p_win_A = Phi(t);
 
   // 3. Determine actual outcome and total team delta
   const actual_A = scoreA > scoreB ? 1 : 0;
   const margin_mult = 1.0 + Math.abs(scoreA - scoreB) / 11.0;
-  
+
   // Total points to distribute to the team
   const deltaA_team = K * (actual_A - p_win_A) * margin_mult;
   const deltaB_team = -deltaA_team;
@@ -182,21 +223,25 @@ export function calculate_new_ratings(
    */
   function split_weights(team: PlayerStats[]) {
     // Uncertainty component (u)
-    const inv_vars = team.map(p => 1.0 / Math.pow(Math.max(1e-6, p.sigma), 2));
+    const inv_vars = team.map(
+      (p) => 1.0 / Math.pow(Math.max(1e-6, p.sigma), 2),
+    );
     const sum_inv = inv_vars.reduce((a, b) => a + b, 0) || 1.0;
-    const u = inv_vars.map(v => v / sum_inv);
+    const u = inv_vars.map((v) => v / sum_inv);
 
     // Skill component (s)
-    const mus = team.map(p => p.mu);
-    const exps = mus.map(m => Math.exp(m / Math.max(1e-6, softmax_temp)));
+    const mus = team.map((p) => p.mu);
+    const exps = mus.map((m) => Math.exp(m / Math.max(1e-6, softmax_temp)));
     const s_sum = exps.reduce((a, b) => a + b, 0) || 1.0;
-    const s = exps.map(e => e / s_sum);
+    const s = exps.map((e) => e / s_sum);
 
     // Blend them using (s) universally to reward/penalize higher rated players more
-    const raw = team.map((_, i) => lambda_uncertainty * u[i] + (1 - lambda_uncertainty) * s[i]);
+    const raw = team.map(
+      (_, i) => lambda_uncertainty * u[i] + (1 - lambda_uncertainty) * s[i],
+    );
 
     const tot = raw.reduce((a, b) => a + b, 0) || 1.0;
-    const w = raw.map(x => x / tot);
+    const w = raw.map((x) => x / tot);
     return { w };
   }
 
@@ -206,7 +251,7 @@ export function calculate_new_ratings(
   // 4. Calculate specific player updates
   const surprise = Math.abs(actual_A - p_win_A);
   let sigma_shrink_mult = 1.0 - tau * (1.0 + 0.5 * surprise);
-  sigma_shrink_mult = Math.max(0.80, sigma_shrink_mult);
+  sigma_shrink_mult = Math.max(0.8, sigma_shrink_mult);
 
   function apply_taper(mu: number, delta: number) {
     if (delta >= 0) {
@@ -258,31 +303,31 @@ export async function update_player_ratings_in_db(
   teamA_ids: number[], // [player1, player2]
   teamB_ids: number[], // [player3, player4]
   scoreA: number,
-  scoreB: number
+  scoreB: number,
 ) {
   // 1. Fetch current ratings from 'ratings' table
   const allPlayerIds = [...teamA_ids, ...teamB_ids];
-  
+
   const { data: ratingsData, error } = await supabase
-    .from('ratings')
-    .select('player_id, aura_mu, aura_sigma')
-    .in('player_id', allPlayerIds);
+    .from("ratings")
+    .select("player_id, aura_mu, aura_sigma")
+    .in("player_id", allPlayerIds);
 
   if (error) {
-    throw new Error('Failed to fetch player ratings: ' + error.message);
+    throw new Error("Failed to fetch player ratings: " + error.message);
   }
 
   // Map DB data to PlayerStats objects
   const statsMap = new Map<number, PlayerStats>();
-  
-  // Default starting stats if not found in DB
-  const DEFAULT_MU = 25.0;
-  const DEFAULT_SIGMA = 8.33;
 
   // Populate map from DB
   if (ratingsData) {
-    ratingsData.forEach(r => {
-      statsMap.set(r.player_id, { id: r.player_id, mu: r.aura_mu, sigma: r.aura_sigma });
+    ratingsData.forEach((r) => {
+      statsMap.set(r.player_id, {
+        id: r.player_id,
+        mu: r.aura_mu,
+        sigma: r.aura_sigma,
+      });
     });
   }
 
@@ -293,35 +338,41 @@ export async function update_player_ratings_in_db(
   };
 
   // Build Team Arrays
-  const teamA: PlayerStats[] = teamA_ids.map(id => getStats(id));
-  const teamB: PlayerStats[] = teamB_ids.map(id => getStats(id));
+  const teamA: PlayerStats[] = teamA_ids.map((id) => getStats(id));
+  const teamB: PlayerStats[] = teamB_ids.map((id) => getStats(id));
 
   // Keep a snapshot of old stats for history logging
   const oldStatsMap = new Map<number, PlayerStats>();
-  [...teamA, ...teamB].forEach(p => oldStatsMap.set(p.id, { ...p }));
+  [...teamA, ...teamB].forEach((p) => oldStatsMap.set(p.id, { ...p }));
 
   // 2. Calculate New Ratings
-  const { teamA_new, teamB_new } = calculate_new_ratings(teamA, teamB, scoreA, scoreB);
+  const { teamA_new, teamB_new } = calculate_new_ratings(
+    teamA,
+    teamB,
+    scoreA,
+    scoreB,
+  );
   const allNewStats = [...teamA_new, ...teamB_new];
 
   // 3. Perform DB Updates
-  
+
   // A. Upsert into 'ratings' table
-  const ratingUpserts = allNewStats.map(p => ({
+  const ratingUpserts = allNewStats.map((p) => ({
     player_id: p.id,
     aura_mu: p.mu,
     aura_sigma: p.sigma,
-    last_updated: new Date().toISOString()
+    last_updated: new Date().toISOString(),
   }));
 
   const { error: upsertError } = await supabase
-    .from('ratings')
-    .upsert(ratingUpserts, { onConflict: 'player_id' });
+    .from("ratings")
+    .upsert(ratingUpserts, { onConflict: "player_id" });
 
-  if (upsertError) throw new Error('Failed to update ratings: ' + upsertError.message);
+  if (upsertError)
+    throw new Error("Failed to update ratings: " + upsertError.message);
 
   // B. Insert into 'rating_history' table
-  const historyInserts = allNewStats.map(p => {
+  const historyInserts = allNewStats.map((p) => {
     const old = oldStatsMap.get(p.id)!;
     return {
       player_id: p.id,
@@ -329,15 +380,58 @@ export async function update_player_ratings_in_db(
       old_mu: old.mu,
       old_sigma: old.sigma,
       new_mu: p.mu,
-      new_sigma: p.sigma
+      new_sigma: p.sigma,
     };
   });
 
   const { error: historyError } = await supabase
-    .from('rating_history')
+    .from("rating_history")
     .insert(historyInserts);
 
-  if (historyError) throw new Error('Failed to write rating history: ' + historyError.message);
+  if (historyError)
+    throw new Error("Failed to write rating history: " + historyError.message);
 
   return { success: true, updated: allNewStats };
+}
+
+/**
+ * Reverts player ratings to their beginning-of-match state when undoing a
+ * completed match. Restores old_mu/old_sigma from rating_history (the values
+ * before the match result was applied) into the ratings table and removes
+ * that match's history rows. Call only when undoing the final point of a
+ * completed match (after update_player_ratings_in_db was applied).
+ */
+export async function revert_player_ratings_for_match(matchId: number) {
+  const { data: historyRows, error: fetchError } = await supabase
+    .from("rating_history")
+    .select("player_id, old_mu, old_sigma")
+    .eq("match_id", matchId);
+
+  if (fetchError)
+    throw new Error("Failed to fetch rating history: " + fetchError.message);
+  if (!historyRows?.length) return { success: true, reverted: 0 };
+
+  const ratingRestores = historyRows.map((r) => ({
+    player_id: r.player_id,
+    aura_mu: r.old_mu,
+    aura_sigma: r.old_sigma,
+    last_updated: new Date().toISOString(),
+  }));
+
+  const { error: upsertError } = await supabase
+    .from("ratings")
+    .upsert(ratingRestores, { onConflict: "player_id" });
+
+  if (upsertError)
+    throw new Error("Failed to revert ratings: " + upsertError.message);
+
+  const { error: deleteError } = await supabase
+    .from("rating_history")
+    .delete()
+    .eq("match_id", matchId);
+
+  if (deleteError)
+    throw new Error("Failed to remove rating history: " + deleteError.message);
+
+  return { success: true, reverted: historyRows.length };
 }

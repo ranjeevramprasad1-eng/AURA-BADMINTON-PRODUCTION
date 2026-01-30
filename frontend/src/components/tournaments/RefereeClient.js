@@ -17,9 +17,20 @@ import {
   ArrowUpDown,
   ArrowLeftRight,
   Play,
+  Trophy,
+  BadgeQuestionMark,
 } from "lucide-react";
 import AddTeamDialog from "@/components/tournaments/AddTeamDialog";
 import ScoreDrawer from "@/components/tournaments/ScoreDrawer";
+import {
+  Drawer,
+  DrawerTrigger,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerDescription,
+  DrawerFooter,
+} from "@/components/ui/drawer";
 import { faker } from "@faker-js/faker";
 import { cn } from "@/lib/utils";
 import {
@@ -38,6 +49,9 @@ export default function RefereeClient() {
     pos3: null,
     pos4: null,
   });
+  // Badminton: only bottom-left (pos2) or top-right (pos3) can start serving
+  const [startingServerPosition, setStartingServerPosition] = useState("pos2");
+  const [startDrawerOpen, setStartDrawerOpen] = useState(false);
 
   const queryClient = useQueryClient();
   const { data: matchData, isLoading } = useRefereeMatch(
@@ -82,9 +96,19 @@ export default function RefereeClient() {
           pos_4: positions.pos4,
         },
       }),
-    onSuccess: () => {
+    onSuccess: (data) => {
+      setStartDrawerOpen(false);
       toast.success("Match started successfully!");
-      // Invalidate queries to refetch match state with positions
+      // Preserve team sides from API response so display doesn't reset
+      const pos = data?.data?.positions ?? data?.positions;
+      if (pos?.pos_1 != null && pos?.pos_2 != null && pos?.pos_3 != null && pos?.pos_4 != null) {
+        setPositions({
+          pos1: pos.pos_1,
+          pos2: pos.pos_2,
+          pos3: pos.pos_3,
+          pos4: pos.pos_4,
+        });
+      }
       queryClient.invalidateQueries({
         queryKey: ["referee-match", params.id, params.round, params.match],
       });
@@ -123,6 +147,21 @@ export default function RefereeClient() {
             return oldData;
           }
         );
+      }
+
+      console.log("Original assigned positions:", JSON.stringify(positions, null, 2));
+      console.log("Updated Scores:", JSON.stringify(updatedScores, null, 2));
+
+      // Apply updated positions from API (server-win swap etc.); API preserves initial court sides:
+      // pos_1/pos_2 = left court, pos_3/pos_4 = right court (either team can be on either side)
+      const pos = updatedScores?.positions ?? response?.data?.data?.positions;
+      if (pos?.pos_1 != null && pos?.pos_2 != null && pos?.pos_3 != null && pos?.pos_4 != null) {
+        setPositions({
+          pos1: pos.pos_1,
+          pos2: pos.pos_2,
+          pos3: pos.pos_3,
+          pos4: pos.pos_4,
+        });
       }
 
       // Invalidate queries to ensure we have the latest data
@@ -204,28 +243,40 @@ export default function RefereeClient() {
     };
   }, [params.match, isMatchStarted]);
 
-  // Load positions from metadata when match state is available (must be before conditional returns)
+  // Load positions from API; API preserves initial court sides: left court = pos_1/pos_2, right court = pos_3/pos_4
   useEffect(() => {
-    // Only load positions if match is started and positions exist in metadata
-    if (isMatchStarted && matchData) {
-      if (matchState?.metadata) {
-        const meta = matchState.metadata;
-        setPositions({
-          pos1: meta.team_a_pos?.right_player_id || null,
-          pos2: meta.team_a_pos?.left_player_id || null,
-          pos3: meta.team_b_pos?.right_player_id || null,
-          pos4: meta.team_b_pos?.left_player_id || null,
-        });
-      } else if (matchData.metadata) {
-        // Fallback to metadata from matchData if available
-        const meta = matchData.metadata;
-        setPositions({
-          pos1: meta.team_a_pos?.right_player_id || null,
-          pos2: meta.team_a_pos?.left_player_id || null,
-          pos3: meta.team_b_pos?.right_player_id || null,
-          pos4: meta.team_b_pos?.left_player_id || null,
-        });
-      }
+    if (!isMatchStarted || !matchData) return;
+    const stored =
+      matchState?.display_positions ??
+      matchState?.positions ??
+      matchData?.display_positions ??
+      matchData?.positions;
+    if (stored && [stored.pos_1, stored.pos_2, stored.pos_3, stored.pos_4].every((v) => v != null)) {
+      setPositions({
+        pos1: stored.pos_1,
+        pos2: stored.pos_2,
+        pos3: stored.pos_3,
+        pos4: stored.pos_4,
+      });
+      return;
+    }
+    // Fallback: derive from team_a_pos/team_b_pos (assumes Team A = left, Team B = right)
+    if (matchState?.metadata) {
+      const meta = matchState.metadata;
+      setPositions({
+        pos1: meta.team_a_pos?.right_player_id ?? null,
+        pos2: meta.team_a_pos?.left_player_id ?? null,
+        pos3: meta.team_b_pos?.right_player_id ?? null,
+        pos4: meta.team_b_pos?.left_player_id ?? null,
+      });
+    } else if (matchData.metadata) {
+      const meta = matchData.metadata;
+      setPositions({
+        pos1: meta.team_a_pos?.right_player_id ?? null,
+        pos2: meta.team_a_pos?.left_player_id ?? null,
+        pos3: meta.team_b_pos?.right_player_id ?? null,
+        pos4: meta.team_b_pos?.left_player_id ?? null,
+      });
     }
   }, [matchState, matchData, isMatchStarted]);
 
@@ -260,7 +311,6 @@ export default function RefereeClient() {
   const servingTeamId = matchState?.serving_team_id;
   const serverSequence = matchState?.server_sequence;
   const servingPlayerIdState = matchState?.serving_player_id;
-  const badmintonSets = matchState?.sets || { a: 0, b: 0 };
 
   const teamAScore = scores?.teamA || 0;
   const teamBScore = scores?.teamB || 0;
@@ -271,12 +321,9 @@ export default function RefereeClient() {
   const isTeamAWinner = winnerTeamIdFromData && String(winnerTeamIdFromData) === teamAId;
   const isTeamBWinner = winnerTeamIdFromData && String(winnerTeamIdFromData) === teamBId;
 
-  // Format score display
+  // Format score display (default: Team A - Team B; overridden below by position when both sides assigned)
   let currentScore = "0 - 0";
   if (isBadminton) {
-    // Show Sets if any sets won, else show points.
-    // Format: "Sets: A-B" below? Or include in main display?
-    // User wants "Scoring".
     currentScore = `${teamAScore} - ${teamBScore}`;
   } else {
     currentScore = scores
@@ -311,7 +358,42 @@ export default function RefereeClient() {
   };
 
   const servingPlayerId = getServingPlayerId();
-  const isPlayerServing = (playerId) => servingPlayerId === playerId;
+  const isPlayerServing = (playerId) =>
+    playerId != null && servingPlayerId != null && Number(servingPlayerId) === Number(playerId);
+
+  // Team-based serving ring color (Team A = blue, Team B = green) regardless of court side
+  const isPlayerTeamA = (playerId) => {
+    const p = getPlayerById(playerId);
+    return p != null && (String(p.team_id) === teamAId || p.team_id === teamIds[0]);
+  };
+  const isPlayerTeamB = (playerId) => {
+    const p = getPlayerById(playerId);
+    return p != null && (String(p.team_id) === teamBId || p.team_id === teamIds[1]);
+  };
+  const getServingRingClassName = (playerId) => {
+    if (!isPlayerServing(playerId)) return "ring-4 ring-muted/20";
+    const isTeamA = isPlayerTeamA(playerId);
+    const ringColor = isTeamA ? "ring-brand-blue" : "ring-brand-green";
+    return `ring-4 ${ringColor} ring-offset-2 ring-offset-background animate-pulse`;
+  };
+  const getServingBadgeClassName = (playerId) => {
+    if (!isPlayerServing(playerId)) return "";
+    return isPlayerTeamA(playerId)
+      ? "bg-brand-blue text-white"
+      : "bg-brand-green text-white";
+  };
+  const getServingBorderClassName = (playerId) => {
+    if (!isPlayerServing(playerId)) return "border-border/50";
+    return isPlayerTeamA(playerId)
+      ? "border-brand-blue/50 bg-brand-blue/5"
+      : "border-brand-green/50 bg-brand-green/5";
+  };
+  const getServingRingSmallClassName = (playerId) => {
+    if (!isPlayerServing(playerId)) return "bg-muted border-border";
+    return isPlayerTeamA(playerId)
+      ? "bg-brand-blue/10 border-brand-blue ring-2 ring-brand-blue/30"
+      : "bg-brand-green/10 border-brand-green ring-2 ring-brand-green/30";
+  };
 
   const allPositionsAssigned =
     positions.pos1 &&
@@ -338,12 +420,13 @@ export default function RefereeClient() {
     };
 
     if (isBadminton) {
-      // For Badminton, we need serving_player_id. Default to right player (pos1) of Team A.
-      if (!positions.pos1) {
-        toast.error("Missing starting player position (pos1)");
+      // Only bottom-left (pos2) or top-right (pos3) can start serving in badminton doubles
+      const firstServerId = startingServerPosition === "pos2" ? positions.pos2 : positions.pos3;
+      if (!firstServerId) {
+        toast.error("Missing starting server position (bottom-left or top-right)");
         return;
       }
-      payload.serving_player_id = positions.pos1;
+      payload.serving_player_id = firstServerId;
     } else {
       // For Pickleball, we need serving_team_id
       payload.serving_team_id = servingTeamId;
@@ -373,9 +456,13 @@ export default function RefereeClient() {
     undoMutation.mutate(parseInt(params.match));
   };
 
-  // Get player by ID
+  // Get player by ID (handles number/string id from API or positions state)
   const getPlayerById = (playerId) => {
-    return players?.find((p) => p.id === playerId);
+    if (playerId == null) return undefined;
+    const numId = Number(playerId);
+    return players?.find(
+      (p) => p.id === playerId || Number(p.id) === numId || String(p.id) === String(playerId)
+    );
   };
 
   // Check if team is assigned
@@ -387,19 +474,54 @@ export default function RefereeClient() {
     }
   };
 
-  // Get which team is assigned to a side
+  // Get which team is assigned to a side (court side: left = pos1/2, right = pos3/4)
   const getAssignedTeam = (side) => {
     if (side === "left" && positions.pos1) {
       const player = getPlayerById(positions.pos1);
-      if (teamA.some((p) => p.id === player?.id)) return "teamA";
-      if (teamB.some((p) => p.id === player?.id)) return "teamB";
+      if (player && teamA.some((p) => Number(p.id) === Number(player.id))) return "teamA";
+      if (player && teamB.some((p) => Number(p.id) === Number(player.id))) return "teamB";
     } else if (side === "right" && positions.pos3) {
       const player = getPlayerById(positions.pos3);
-      if (teamA.some((p) => p.id === player?.id)) return "teamA";
-      if (teamB.some((p) => p.id === player?.id)) return "teamB";
+      if (player && teamA.some((p) => Number(p.id) === Number(player.id))) return "teamA";
+      if (player && teamB.some((p) => Number(p.id) === Number(player.id))) return "teamB";
     }
     return null;
   };
+
+  // Court-side panel data: SERVING and score panel follow court side (left/right), not fixed Team A/B
+  const leftCourtTeam = getAssignedTeam("left");
+  const rightCourtTeam = getAssignedTeam("right");
+  const leftCourtTeamId = leftCourtTeam === "teamA" ? teamAId : leftCourtTeam === "teamB" ? teamBId : null;
+  const rightCourtTeamId = rightCourtTeam === "teamA" ? teamAId : rightCourtTeam === "teamB" ? teamBId : null;
+  const leftCourtScore = leftCourtTeam === "teamA" ? teamAScore : leftCourtTeam === "teamB" ? teamBScore : 0;
+  const rightCourtScore = rightCourtTeam === "teamA" ? teamAScore : rightCourtTeam === "teamB" ? teamBScore : 0;
+  const leftCourtIsServing = (leftCourtTeam === "teamA" && isTeamAServing) || (leftCourtTeam === "teamB" && isTeamBServing);
+  const rightCourtIsServing = (rightCourtTeam === "teamA" && isTeamAServing) || (rightCourtTeam === "teamB" && isTeamBServing);
+  const leftCourtName = leftCourtTeam === "teamA" ? "Team A" : leftCourtTeam === "teamB" ? "Team B" : "";
+  const rightCourtName = rightCourtTeam === "teamA" ? "Team A" : rightCourtTeam === "teamB" ? "Team B" : "";
+  const leftCourtIsWinner = (leftCourtTeam === "teamA" && isTeamAWinner) || (leftCourtTeam === "teamB" && isTeamBWinner);
+  const rightCourtIsWinner = (rightCourtTeam === "teamA" && isTeamAWinner) || (rightCourtTeam === "teamB" && isTeamBWinner);
+  const leftCourtIsTeamA = leftCourtTeam === "teamA";
+  const rightCourtIsTeamA = rightCourtTeam === "teamA";
+
+  // Align main score display by team position (left court - right court) when both sides assigned
+  const usePositionScore =
+    isTeamAssigned("left") &&
+    isTeamAssigned("right") &&
+    leftCourtTeam != null &&
+    rightCourtTeam != null;
+  if (usePositionScore) {
+    if (isBadminton) {
+      currentScore = `${leftCourtScore} - ${rightCourtScore}`;
+    } else {
+      const leftVal = leftCourtScore;
+      const rightVal = rightCourtScore;
+      currentScore =
+        serverSequence !== null && serverSequence !== undefined
+          ? `${leftVal} - ${rightVal} - ${serverSequence}`
+          : `${leftVal} - ${rightVal}`;
+    }
+  }
 
   // Check if the other team (not assigned to the given side) has enough players
   const hasOtherTeamEnoughPlayers = (side) => {
@@ -576,21 +698,6 @@ export default function RefereeClient() {
             </div>
           )}
 
-          {/* Start Match Button */}
-          {allPositionsAssigned && !isMatchStarted && (
-            <div className="mb-6 flex justify-center">
-              <Button
-                onClick={handleStartMatch}
-                disabled={startMatchMutation.isPending}
-                size="lg"
-                className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-xl shadow-lg shadow-primary/25 px-8 h-12"
-              >
-                <Play className="size-5 mr-2 fill-current" />
-                {startMatchMutation.isPending ? "Starting Match..." : "Start Match"}
-              </Button>
-            </div>
-          )}
-
           {/* Court Layout - Complex Grid */}
           <div className="mb-6">
             <div
@@ -606,71 +713,92 @@ export default function RefereeClient() {
                   : "grid-cols-3"
               )}
             >
-              {/* Left Dark Green Rectangle (Serve/Score Area) */}
+              {/* Left court side (Serve/Score) — team on left court (pos1/2), so SERVING shows on left when that team serves */}
               {teamAId &&
                 teamBId &&
                 teamA.length > 0 &&
                 teamB.length > 0 &&
                 isTeamAssigned("left") &&
                 isTeamAssigned("right") && (
-                  <div className="col-span-1 bg-linear-to-b from-brand-blue/20 to-brand-blue/5 flex flex-col items-center justify-center min-h-[200px] gap-2 border-r border-dashed border-brand-blue/20">
+                  <div
+                    className={cn(
+                      "col-span-1 flex flex-col items-center justify-center min-h-[200px] gap-2 border-r border-dashed",
+                      leftCourtIsTeamA
+                        ? "bg-linear-to-b from-brand-blue/20 to-brand-blue/5 border-brand-blue/20"
+                        : "bg-linear-to-b from-brand-green/20 to-brand-green/5 border-brand-green/20"
+                    )}
+                  >
                     {matchEnded ? (
                       <div className="flex flex-col items-center gap-2 px-4">
-                        {isTeamAWinner ? (
+                        {leftCourtIsWinner ? (
                           <>
                             <div className="text-xs font-black bg-yellow-500 text-white px-2 py-0.5 rounded shadow-sm">
                               WINNER
                             </div>
-                            <div className="text-xs font-bold text-center text-brand-blue uppercase">
-                              Team A
+                            <div
+                              className={cn(
+                                "text-xs font-bold text-center uppercase",
+                                leftCourtIsTeamA ? "text-brand-blue" : "text-brand-green"
+                              )}
+                            >
+                              {leftCourtName}
                             </div>
                           </>
                         ) : (
                           <div className="text-xs font-medium text-center text-muted-foreground opacity-50">
-                            Team A
+                            {leftCourtName}
                           </div>
                         )}
                       </div>
                     ) : (
                       <>
-                        {isTeamAServing && (
-                          <div className="text-[10px] font-black bg-brand-blue text-white px-2 py-0.5 rounded-full uppercase tracking-wider shadow-sm animate-pulse">
+                        {isMatchStarted && (
+                          <div
+                            className={cn(
+                              "text-2xl font-black tabular-nums",
+                              leftCourtIsTeamA ? "text-brand-blue" : "text-brand-green"
+                            )}
+                          >
+                            {leftCourtScore}
+                          </div>
+                        )}
+                        {leftCourtIsServing && (
+                          <div
+                            className={cn(
+                              "text-[10px] font-black text-white px-2 py-0.5 rounded-full uppercase tracking-wider shadow-sm animate-pulse",
+                              leftCourtIsTeamA ? "bg-brand-blue" : "bg-brand-green"
+                            )}
+                          >
                             SERVING
                           </div>
                         )}
-                        {teamAId ? (
+                        {leftCourtTeamId && isMatchStarted && (
                           <ScoreDrawer
                             isLoading={recordPointMutation.isPending}
-                            teamId={teamAId}
-                            teamName="Team A"
-                            currentScore={teamAScore}
+                            teamId={leftCourtTeamId}
+                            teamName={leftCourtName}
+                            currentScore={leftCourtScore}
                             onConfirm={handleScoreUpdate}
                             trigger={
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                disabled={matchEnded}
+                                disabled={matchEnded || !isMatchStarted}
                                 className={cn(
                                   "size-12 rounded-full shadow-lg transition-all duration-200",
-                                  isTeamAServing
-                                    ? "bg-brand-blue text-white hover:bg-brand-blue/90 hover:scale-110 ring-4 ring-brand-blue/20"
-                                    : "bg-background text-muted-foreground hover:text-brand-blue border-2 border-border",
-                                  matchEnded && "opacity-50 cursor-not-allowed"
+                                  leftCourtIsServing
+                                    ? leftCourtIsTeamA
+                                      ? "bg-brand-blue text-white hover:bg-brand-blue/90 hover:scale-110 ring-4 ring-brand-blue/20"
+                                      : "bg-brand-green text-white hover:bg-brand-green/90 hover:scale-110 ring-4 ring-brand-green/20"
+                                    : "bg-background text-muted-foreground border-2 border-border",
+                                  leftCourtIsTeamA ? "hover:text-brand-blue" : "hover:text-brand-green",
+                                  (matchEnded || !isMatchStarted) && "opacity-50 cursor-not-allowed"
                                 )}
                               >
                                 <Plus className="size-6" />
                               </Button>
                             }
                           />
-                        ) : (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="size-12 rounded-full bg-muted text-muted-foreground opacity-50 cursor-not-allowed"
-                            disabled
-                          >
-                            <Plus className="size-6" />
-                          </Button>
                         )}
                       </>
                     )}
@@ -732,14 +860,12 @@ export default function RefereeClient() {
                             <div className="relative">
                               <div className={cn(
                                 "size-14 rounded-full bg-muted flex items-center justify-center transition-all",
-                                isPlayerServing(positions.pos1)
-                                  ? "ring-4 ring-brand-blue ring-offset-2 ring-offset-background animate-pulse"
-                                  : "ring-4 ring-muted/20"
+                                getServingRingClassName(positions.pos1)
                               )}>
                                 <User className="size-6 text-muted-foreground" />
                               </div>
                               {isPlayerServing(positions.pos1) && (
-                                <div className="absolute -top-1 -right-1 bg-brand-blue text-white text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-wider shadow-sm">
+                                <div className={cn("absolute -top-1 -right-1 text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-wider shadow-sm", getServingBadgeClassName(positions.pos1))}>
                                   Serve
                                 </div>
                               )}
@@ -757,14 +883,12 @@ export default function RefereeClient() {
                             <div className="relative">
                               <div className={cn(
                                 "size-14 rounded-full bg-muted flex items-center justify-center transition-all",
-                                isPlayerServing(positions.pos2)
-                                  ? "ring-4 ring-brand-blue ring-offset-2 ring-offset-background animate-pulse"
-                                  : "ring-4 ring-muted/20"
+                                getServingRingClassName(positions.pos2)
                               )}>
                                 <User className="size-6 text-muted-foreground" />
                               </div>
                               {isPlayerServing(positions.pos2) && (
-                                <div className="absolute -top-1 -right-1 bg-brand-blue text-white text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-wider shadow-sm">
+                                <div className={cn("absolute -top-1 -right-1 text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-wider shadow-sm", getServingBadgeClassName(positions.pos2))}>
                                   Serve
                                 </div>
                               )}
@@ -818,14 +942,12 @@ export default function RefereeClient() {
                             <div className="relative">
                               <div className={cn(
                                 "size-14 rounded-full bg-muted flex items-center justify-center transition-all",
-                                isPlayerServing(positions.pos3)
-                                  ? "ring-4 ring-brand-green ring-offset-2 ring-offset-background animate-pulse"
-                                  : "ring-4 ring-muted/20"
+                                getServingRingClassName(positions.pos3)
                               )}>
                                 <User className="size-6 text-muted-foreground" />
                               </div>
                               {isPlayerServing(positions.pos3) && (
-                                <div className="absolute -top-1 -right-1 bg-brand-green text-white text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-wider shadow-sm">
+                                <div className={cn("absolute -top-1 -right-1 text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-wider shadow-sm", getServingBadgeClassName(positions.pos3))}>
                                   Serve
                                 </div>
                               )}
@@ -843,14 +965,12 @@ export default function RefereeClient() {
                             <div className="relative">
                               <div className={cn(
                                 "size-14 rounded-full bg-muted flex items-center justify-center transition-all",
-                                isPlayerServing(positions.pos4)
-                                  ? "ring-4 ring-brand-green ring-offset-2 ring-offset-background animate-pulse"
-                                  : "ring-4 ring-muted/20"
+                                getServingRingClassName(positions.pos4)
                               )}>
                                 <User className="size-6 text-muted-foreground" />
                               </div>
                               {isPlayerServing(positions.pos4) && (
-                                <div className="absolute -top-1 -right-1 bg-brand-green text-white text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-wider shadow-sm">
+                                <div className={cn("absolute -top-1 -right-1 text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-wider shadow-sm", getServingBadgeClassName(positions.pos4))}>
                                   Serve
                                 </div>
                               )}
@@ -868,44 +988,71 @@ export default function RefereeClient() {
                 </div>
               </div>
 
-              {/* Right Dark Green Rectangle (Serve/Score Area) */}
+              {/* Right court side (Serve/Score) — team on right court (pos3/4) */}
               {teamAId &&
                 teamBId &&
                 teamA.length > 0 &&
                 teamB.length > 0 &&
                 isTeamAssigned("left") &&
                 isTeamAssigned("right") && (
-                  <div className="col-span-1 bg-linear-to-b from-brand-green/20 to-brand-green/5 flex flex-col items-center justify-center min-h-[200px] gap-2 border-l border-dashed border-brand-green/20">
+                  <div
+                    className={cn(
+                      "col-span-1 flex flex-col items-center justify-center min-h-[200px] gap-2 border-l border-dashed",
+                      rightCourtIsTeamA
+                        ? "bg-linear-to-b from-brand-blue/20 to-brand-blue/5 border-brand-blue/20"
+                        : "bg-linear-to-b from-brand-green/20 to-brand-green/5 border-brand-green/20"
+                    )}
+                  >
                     {matchEnded ? (
                       <div className="flex flex-col items-center gap-2 px-4">
-                        {isTeamBWinner ? (
+                        {rightCourtIsWinner ? (
                           <>
                             <div className="text-xs font-black bg-yellow-500 text-white px-2 py-0.5 rounded shadow-sm">
                               WINNER
                             </div>
-                            <div className="text-xs font-bold text-center text-brand-green uppercase">
-                              Team B
+                            <div
+                              className={cn(
+                                "text-xs font-bold text-center uppercase",
+                                rightCourtIsTeamA ? "text-brand-blue" : "text-brand-green"
+                              )}
+                            >
+                              {rightCourtName}
                             </div>
                           </>
                         ) : (
                           <div className="text-xs font-medium text-center text-muted-foreground opacity-50">
-                            Team B
+                            {rightCourtName}
                           </div>
                         )}
                       </div>
                     ) : (
                       <>
-                        {isTeamBServing && (
-                          <div className="text-[10px] font-black bg-brand-green text-white px-2 py-0.5 rounded-full uppercase tracking-wider shadow-sm animate-pulse">
+                        {isMatchStarted && (
+                          <div
+                            className={cn(
+                              "text-2xl font-black tabular-nums",
+                              rightCourtIsTeamA ? "text-brand-blue" : "text-brand-green"
+                            )}
+                          >
+                            {rightCourtScore}
+                          </div>
+                        )}
+                        {rightCourtIsServing && (
+                          <div
+                            className={cn(
+                              "text-[10px] font-black text-white px-2 py-0.5 rounded-full uppercase tracking-wider shadow-sm animate-pulse",
+                              rightCourtIsTeamA ? "bg-brand-blue" : "bg-brand-green"
+                            )}
+                          >
                             SERVING
                           </div>
                         )}
-                        {teamBId ? (
+                        {rightCourtTeamId && isMatchStarted && (
                           <ScoreDrawer
                             isLoading={recordPointMutation.isPending}
-                            teamId={teamBId}
-                            teamName="Team B"
-                            currentScore={teamBScore}
+                            teamId={rightCourtTeamId}
+                            teamName={rightCourtName}
+                            currentScore={rightCourtScore}
                             onConfirm={handleScoreUpdate}
                             trigger={
                               <Button
@@ -914,25 +1061,19 @@ export default function RefereeClient() {
                                 disabled={matchEnded}
                                 className={cn(
                                   "size-12 rounded-full shadow-lg transition-all duration-200",
-                                  isTeamBServing
-                                    ? "bg-brand-green text-white hover:bg-brand-green/90 hover:scale-110 ring-4 ring-brand-green/20"
-                                    : "bg-background text-muted-foreground hover:text-brand-green border-2 border-border",
-                                  matchEnded && "opacity-50 cursor-not-allowed"
+                                  rightCourtIsServing
+                                    ? rightCourtIsTeamA
+                                      ? "bg-brand-blue text-white hover:bg-brand-blue/90 hover:scale-110 ring-4 ring-brand-blue/20"
+                                      : "bg-brand-green text-white hover:bg-brand-green/90 hover:scale-110 ring-4 ring-brand-green/20"
+                                    : "bg-background text-muted-foreground border-2 border-border",
+                                  rightCourtIsTeamA ? "hover:text-brand-blue" : "hover:text-brand-green",
+                                  (matchEnded) && "opacity-50 cursor-not-allowed"
                                 )}
                               >
                                 <Plus className="size-6" />
                               </Button>
                             }
                           />
-                        ) : (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="size-12 rounded-full bg-muted text-muted-foreground opacity-50 cursor-not-allowed"
-                            disabled
-                          >
-                            <Plus className="size-6" />
-                          </Button>
                         )}
                       </>
                     )}
@@ -950,6 +1091,91 @@ export default function RefereeClient() {
               </span>
             </div>
           </div>
+
+          {/* Start Match: trigger opens drawer to pick server and start */}
+          {allPositionsAssigned && !isMatchStarted && (
+            <div className="mb-6 flex justify-center">
+              <Drawer open={startDrawerOpen} onOpenChange={setStartDrawerOpen} className="max-w-2xl">
+                <DrawerTrigger asChild>
+                  <Button
+                    size="lg"
+                    className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-xl  px-8 h-12"
+                  >
+                    <Play className="size-5 mr-2 fill-current" />
+                    Start
+                  </Button>
+                </DrawerTrigger>
+                <DrawerContent className="overflow-hidden max-w-[500px] mx-auto">
+                  <DrawerHeader className="text-center pb-2">
+                    <div className="mx-auto mb-2 flex size-12 items-center justify-center rounded-2xl bg-primary/15 text-primary ring-2 ring-primary/30">
+                      <Trophy className="size-6" />
+                    </div>
+                    <DrawerTitle className="text-xl font-black tracking-tight text-foreground">
+                      Start Match
+                    </DrawerTitle>
+                    <DrawerDescription className="text-base text-muted-foreground">
+                      Pick who serves first, then hit start.
+                    </DrawerDescription>
+                  </DrawerHeader>
+                  <div className="p-4 space-y-4 w-full">
+                    {isBadminton && (
+                      <div className="flex flex-col gap-3 rounded-2xl">
+                        <p className="flex items-center gap-2 font-black uppercase tracking-wider text-foreground">
+                          <BadgeQuestionMark className="size-5" />
+                          Who serves first?
+                        </p>
+                        <p className="text-xs text-muted-foreground -mt-1">Bottom-left or top-right only</p>
+                        <div className="grid grid-cols-2 gap-4">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setStartingServerPosition("pos2")}
+                            className={cn(
+                              "flex flex-col items-start justify-start h-auto gap-0 w-full",
+                              startingServerPosition === "pos2"
+                              && "border-primary bg-primary text-primary-foreground scale-[1.02]"
+                            )}
+                          >
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-current/80">Bottom left</span>
+                            <span className="text-xs font-bold uppercase tracking-wider ">
+                              {getPlayerById(positions.pos2)?.name || getPlayerById(positions.pos2)?.username || "—"}
+                            </span>
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setStartingServerPosition("pos3")}
+                            className={cn(
+                              "flex flex-col items-start justify-start h-auto gap-0 w-full",
+                              startingServerPosition === "pos3"
+                              && "border-primary bg-primary text-primary-foreground scale-[1.02]"
+                            )}
+                          >
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-current/80">Top right</span>
+                            <span className="text-xs font-bold uppercase tracking-wider">
+
+                              {getPlayerById(positions.pos3)?.name || getPlayerById(positions.pos3)?.username || "—"}
+                            </span>
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <DrawerFooter className="pt-4 pb-6">
+                    <Button
+                      onClick={handleStartMatch}
+                      disabled={startMatchMutation.isPending}
+                      size="lg"
+                      className="h-14 rounded-2xl bg-primary hover:bg-primary/90 text-primary-foreground font-black text-base transition-all hover:scale-[1.02] active:scale-[0.98] w-full"
+                    >
+                      <Play className="size-5 mr-2 fill-current" />
+                      {startMatchMutation.isPending ? "Starting…" : "Start Match"}
+                    </Button>
+                  </DrawerFooter>
+                </DrawerContent>
+              </Drawer>
+            </div>
+          )}
 
           {/* Match Details */}
           <div className="grid grid-cols-3 gap-4 mb-6">
@@ -985,15 +1211,11 @@ export default function RefereeClient() {
                     {positions.pos1 && (
                       <div className={cn(
                         "flex items-center gap-3 p-3 bg-muted/20 rounded-xl border transition-all",
-                        isPlayerServing(positions.pos1)
-                          ? "border-brand-blue/50 bg-brand-blue/5"
-                          : "border-border/50"
+                        getServingBorderClassName(positions.pos1)
                       )}>
                         <div className={cn(
                           "size-8 rounded-full flex items-center justify-center border transition-all",
-                          isPlayerServing(positions.pos1)
-                            ? "bg-brand-blue/10 border-brand-blue ring-2 ring-brand-blue/30"
-                            : "bg-muted border-border"
+                          getServingRingSmallClassName(positions.pos1)
                         )}>
                           <User className="size-4 text-muted-foreground" />
                         </div>
@@ -1003,7 +1225,7 @@ export default function RefereeClient() {
                             "Player"}
                         </span>
                         {isPlayerServing(positions.pos1) && (
-                          <span className="text-[10px] font-black bg-brand-blue text-white px-2 py-0.5 rounded-full uppercase tracking-wider">
+                          <span className={cn("text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider", getServingBadgeClassName(positions.pos1))}>
                             Serving
                           </span>
                         )}
@@ -1012,15 +1234,11 @@ export default function RefereeClient() {
                     {positions.pos2 && (
                       <div className={cn(
                         "flex items-center gap-3 p-3 bg-muted/20 rounded-xl border transition-all",
-                        isPlayerServing(positions.pos2)
-                          ? "border-brand-blue/50 bg-brand-blue/5"
-                          : "border-border/50"
+                        getServingBorderClassName(positions.pos2)
                       )}>
                         <div className={cn(
                           "size-8 rounded-full flex items-center justify-center border transition-all",
-                          isPlayerServing(positions.pos2)
-                            ? "bg-brand-blue/10 border-brand-blue ring-2 ring-brand-blue/30"
-                            : "bg-muted border-border"
+                          getServingRingSmallClassName(positions.pos2)
                         )}>
                           <User className="size-4 text-muted-foreground" />
                         </div>
@@ -1030,7 +1248,7 @@ export default function RefereeClient() {
                             "Player"}
                         </span>
                         {isPlayerServing(positions.pos2) && (
-                          <span className="text-[10px] font-black bg-brand-blue text-white px-2 py-0.5 rounded-full uppercase tracking-wider">
+                          <span className={cn("text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider", getServingBadgeClassName(positions.pos2))}>
                             Serving
                           </span>
                         )}
@@ -1050,15 +1268,11 @@ export default function RefereeClient() {
                     {positions.pos3 && (
                       <div className={cn(
                         "flex items-center gap-3 p-3 bg-muted/20 rounded-xl border transition-all",
-                        isPlayerServing(positions.pos3)
-                          ? "border-brand-green/50 bg-brand-green/5"
-                          : "border-border/50"
+                        getServingBorderClassName(positions.pos3)
                       )}>
                         <div className={cn(
                           "size-8 rounded-full flex items-center justify-center border transition-all",
-                          isPlayerServing(positions.pos3)
-                            ? "bg-brand-green/10 border-brand-green ring-2 ring-brand-green/30"
-                            : "bg-muted border-border"
+                          getServingRingSmallClassName(positions.pos3)
                         )}>
                           <User className="size-4 text-muted-foreground" />
                         </div>
@@ -1068,7 +1282,7 @@ export default function RefereeClient() {
                             "Player"}
                         </span>
                         {isPlayerServing(positions.pos3) && (
-                          <span className="text-[10px] font-black bg-brand-green text-white px-2 py-0.5 rounded-full uppercase tracking-wider">
+                          <span className={cn("text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider", getServingBadgeClassName(positions.pos3))}>
                             Serving
                           </span>
                         )}
@@ -1077,15 +1291,11 @@ export default function RefereeClient() {
                     {positions.pos4 && (
                       <div className={cn(
                         "flex items-center gap-3 p-3 bg-muted/20 rounded-xl border transition-all",
-                        isPlayerServing(positions.pos4)
-                          ? "border-brand-green/50 bg-brand-green/5"
-                          : "border-border/50"
+                        getServingBorderClassName(positions.pos4)
                       )}>
                         <div className={cn(
                           "size-8 rounded-full flex items-center justify-center border transition-all",
-                          isPlayerServing(positions.pos4)
-                            ? "bg-brand-green/10 border-brand-green ring-2 ring-brand-green/30"
-                            : "bg-muted border-border"
+                          getServingRingSmallClassName(positions.pos4)
                         )}>
                           <User className="size-4 text-muted-foreground" />
                         </div>
@@ -1095,7 +1305,7 @@ export default function RefereeClient() {
                             "Player"}
                         </span>
                         {isPlayerServing(positions.pos4) && (
-                          <span className="text-[10px] font-black bg-brand-green text-white px-2 py-0.5 rounded-full uppercase tracking-wider">
+                          <span className={cn("text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider", getServingBadgeClassName(positions.pos4))}>
                             Serving
                           </span>
                         )}

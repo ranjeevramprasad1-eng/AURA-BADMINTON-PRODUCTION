@@ -8,7 +8,7 @@ import { courtsApi, tournamentsApi } from "@/lib/api";
 import { useActiveCourtMatch } from "@/hooks/useCourtMatches";
 import { useTournamentEngine } from "@/hooks/useTournamentEngine";
 import { useDisplayTimer } from "@/hooks/useDisplayTimer";
-import { Loader2 } from "lucide-react";
+import { ArrowLeft, Loader2 } from "lucide-react";
 import {
   ScrollablePage,
   ScrollablePageHeader,
@@ -20,6 +20,7 @@ import { DISPLAY_TIMER_CONFIG } from "@/constants/displayTimer";
 import { getGroupKeys } from "@/lib/utils/tournament";
 import { createWebSocketConnection } from "@/lib/websocket";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 
 /**
  * ViewCourtPage Component
@@ -226,12 +227,14 @@ export default function ViewCourtPage() {
         <ScrollablePageHeader className="relative bg-transparent pointer-events-none">
           <header className="absolute top-0 left-0 right-0 z-20 pointer-events-auto pt-safe-top">
             <div className="flex items-center justify-between px-4 py-3 bg-linear-to-b from-black/50 to-transparent">
-              <button
+              <Button
+                variant="ghost"
+                size="icon"
                 onClick={() => router.back()}
-                className="rounded-full bg-background/20 backdrop-blur-md text-white hover:bg-background/40 hover:text-white p-2"
+                className="rounded-full text-white hover:bg-white/10 hover:text-background"
               >
-                ←
-              </button>
+                <ArrowLeft className="size-5" />
+              </Button>
             </div>
           </header>
         </ScrollablePageHeader>
@@ -321,8 +324,9 @@ export default function ViewCourtPage() {
 
       <ScrollablePageContent className="flex flex-col items-center justify-center p-0">
         {/* Split Screen Layout */}
-        <div className={`w-full h-full transition-all duration-500 ease-in-out ${showStandings ? 'grid grid-cols-2 gap-4' : 'flex items-center justify-center'
-          }`}>
+        <div className={cn("w-full h-full transition-all duration-500 ease-in-out",
+          showStandings ? 'grid grid-cols-2 gap-4' : 'flex items-center justify-center'
+        )}>
           {/* Score Display - Full Width */}
           <ScoreSection
             showStandings={showStandings}

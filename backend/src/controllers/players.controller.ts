@@ -8,6 +8,7 @@ import type {
   createPlayerSchema,
   updatePlayerSchema,
 } from "@/utils/validation";
+import { DEFAULT_MU, DEFAULT_SIGMA } from "@/lib/rating_calculations";
 
 // GET /players - Get all players
 export async function getAllPlayers(c: Context<AuthContext>) {
@@ -33,7 +34,9 @@ export async function getAllPlayers(c: Context<AuthContext>) {
 // GET /players/:id - Get player by ID
 export async function getPlayerById(c: Context<AuthContext>) {
   try {
-    const params = ((c.req as any).valid("param") as any) as z.infer<typeof playerIdSchema>;
+    const params = (c.req as any).valid("param") as any as z.infer<
+      typeof playerIdSchema
+    >;
     const playerId = parseInt(params.id);
 
     if (isNaN(playerId)) {
@@ -57,10 +60,22 @@ export async function getPlayerById(c: Context<AuthContext>) {
       .eq("player_id", playerId)
       .single();
 
+    if (!rating) {
+      // Create default rating
+      await supabase
+        .from("ratings")
+        .insert({
+          player_id: playerId,
+          aura_mu: DEFAULT_MU,
+          aura_sigma: DEFAULT_SIGMA,
+        })
+        .select();
+    }
+
     return c.json({
       data: {
         ...player,
-        rating: rating || null,
+        rating: rating || { aura_mu: DEFAULT_MU, aura_sigma: DEFAULT_SIGMA },
       },
     });
   } catch (error) {
@@ -75,7 +90,9 @@ export async function getPlayerById(c: Context<AuthContext>) {
 export async function createPlayer(c: Context<AuthContext>) {
   try {
     const userId = c.get("userId");
-    const body = ((c.req as any).valid("json") as any) as z.infer<typeof createPlayerSchema>;
+    const body = (c.req as any).valid("json") as any as z.infer<
+      typeof createPlayerSchema
+    >;
 
     // Check if player already exists for this user
     const { data: existingPlayer } = await supabase
@@ -85,7 +102,9 @@ export async function createPlayer(c: Context<AuthContext>) {
       .single();
 
     if (existingPlayer) {
-      throw new HTTPException(409, { message: "Player already exists for this user" });
+      throw new HTTPException(409, {
+        message: "Player already exists for this user",
+      });
     }
 
     const { data: player, error } = await supabase
@@ -117,20 +136,27 @@ export async function createPlayer(c: Context<AuthContext>) {
 export async function updatePlayer(c: Context<AuthContext>) {
   try {
     const playerId = c.get("playerId");
-    const params = ((c.req as any).valid("param") as any) as z.infer<typeof playerIdSchema>;
+    const params = (c.req as any).valid("param") as any as z.infer<
+      typeof playerIdSchema
+    >;
     const targetPlayerId = parseInt(params.id);
-    const body = ((c.req as any).valid("json") as any) as z.infer<typeof updatePlayerSchema>;
+    const body = (c.req as any).valid("json") as any as z.infer<
+      typeof updatePlayerSchema
+    >;
 
     // Only allow users to update their own player profile
     if (targetPlayerId !== Number(playerId)) {
-      throw new HTTPException(403, { message: "Not authorized to update this player" });
+      throw new HTTPException(403, {
+        message: "Not authorized to update this player",
+      });
     }
 
     const updateData: any = {};
     if (body.username !== undefined) updateData.username = body.username;
     if (body.dob !== undefined) updateData.dob = body.dob;
     if (body.gender !== undefined) updateData.gender = body.gender;
-    if (body.photo_url !== undefined) updateData.photo_url = body.photo_url || null;
+    if (body.photo_url !== undefined)
+      updateData.photo_url = body.photo_url || null;
 
     const { data: player, error } = await supabase
       .from("players")
@@ -156,12 +182,16 @@ export async function updatePlayer(c: Context<AuthContext>) {
 export async function deletePlayer(c: Context<AuthContext>) {
   try {
     const playerId = c.get("playerId");
-    const params = ((c.req as any).valid("param") as any) as z.infer<typeof playerIdSchema>;
+    const params = (c.req as any).valid("param") as any as z.infer<
+      typeof playerIdSchema
+    >;
     const targetPlayerId = parseInt(params.id);
 
     // Only allow users to delete their own player profile
     if (targetPlayerId !== Number(playerId)) {
-      throw new HTTPException(403, { message: "Not authorized to delete this player" });
+      throw new HTTPException(403, {
+        message: "Not authorized to delete this player",
+      });
     }
 
     const { error } = await supabase
@@ -213,4 +243,3 @@ export async function searchPlayers(c: Context<AuthContext>) {
     throw new HTTPException(500, { message: (error as Error).message });
   }
 }
-

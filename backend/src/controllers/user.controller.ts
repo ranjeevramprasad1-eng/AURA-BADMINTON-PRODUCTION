@@ -2,12 +2,12 @@ import { HTTPException } from "hono/http-exception";
 import { supabase } from "@/lib/supabase";
 import type { Context } from "hono";
 import type { AuthContext } from "@/middleware/auth";
+import { DEFAULT_MU, DEFAULT_SIGMA } from "@/lib/rating_calculations";
 
 // GET /user/details - Get comprehensive user details
 export async function getUserDetails(c: Context<AuthContext>) {
   try {
     const playerId = c.get("playerId");
-    const userId = c.get("userId");
     const email = c.get("userEmail");
 
     // Get player details
@@ -32,6 +32,18 @@ export async function getUserDetails(c: Context<AuthContext>) {
       .select("aura_mu, aura_sigma")
       .eq("player_id", playerId)
       .single();
+
+    if (!rating) {
+      // Create default rating
+      await supabase
+        .from("ratings")
+        .insert({
+          player_id: playerId,
+          aura_mu: DEFAULT_MU,
+          aura_sigma: DEFAULT_SIGMA,
+        })
+        .select();
+    }
 
     // Get tournaments where user is host
     const { data: hostedTournaments } = await supabase
@@ -78,8 +90,8 @@ export async function getUserDetails(c: Context<AuthContext>) {
         pairings?.map((p: any) => p.match_id).filter(Boolean) || [];
       const tournamentIds = Array.from(
         new Set(
-          pairings?.map((p: any) => p.tournament_id).filter(Boolean) || []
-        )
+          pairings?.map((p: any) => p.tournament_id).filter(Boolean) || [],
+        ),
       );
 
       // Get match details
@@ -96,7 +108,7 @@ export async function getUserDetails(c: Context<AuthContext>) {
         courts (
           court_number
         )
-      `
+      `,
         )
         .in("id", matchIds);
 
@@ -107,7 +119,10 @@ export async function getUserDetails(c: Context<AuthContext>) {
         .in("id", tournamentIds);
 
       const tournamentMap = new Map(
-        tournaments?.map((t: any) => [t.id, { name: t.name, end_time: t.end_time }]) || []
+        tournaments?.map((t: any) => [
+          t.id,
+          { name: t.name, end_time: t.end_time },
+        ]) || [],
       );
 
       // Get all pairings for these matches
@@ -139,7 +154,7 @@ export async function getUserDetails(c: Context<AuthContext>) {
           username,
           photo_url
         )
-      `
+      `,
         )
         .in("team_id", allTeamIds);
 
@@ -153,7 +168,7 @@ export async function getUserDetails(c: Context<AuthContext>) {
         team_a_score,
         team_b_score,
         created_at
-      `
+      `,
         )
         .in("match_id", matchIds);
 
@@ -168,13 +183,14 @@ export async function getUserDetails(c: Context<AuthContext>) {
 
           // Get pairing teams for this match
           const matchPairingIds = matchPairings.map((p: any) => p.id);
-          const matchPairingTeams = allPairingTeams?.filter((pt: any) =>
-            matchPairingIds.includes(pt.pairing_id)
-          ) || [];
+          const matchPairingTeams =
+            allPairingTeams?.filter((pt: any) =>
+              matchPairingIds.includes(pt.pairing_id),
+            ) || [];
 
           // Get teams for this match
           const uniqueTeamIds = Array.from(
-            new Set(matchPairingTeams.map((pt: any) => pt.team_id))
+            new Set(matchPairingTeams.map((pt: any) => pt.team_id)),
           );
           const teams = uniqueTeamIds.map((teamId: number, index: number) => {
             const players =
@@ -201,7 +217,10 @@ export async function getUserDetails(c: Context<AuthContext>) {
             ? match.courts[0]
             : match.courts;
 
-          const tournamentData = tournamentMap.get(match.tournament_id) || { name: '', end_time: null };
+          const tournamentData = tournamentMap.get(match.tournament_id) || {
+            name: "",
+            end_time: null,
+          };
 
           return {
             match_id: match.id,
@@ -225,7 +244,7 @@ export async function getUserDetails(c: Context<AuthContext>) {
           name: player.username,
           username: player.username,
           email: email,
-          aura: rating?.aura_mu || null,
+          aura: rating?.aura_mu || DEFAULT_MU,
           age: age.toString(),
           gender: player.gender,
           photo_url: player.photo_url,
@@ -242,7 +261,7 @@ export async function getUserDetails(c: Context<AuthContext>) {
           name: player.username,
           username: player.username,
           email: email,
-          aura: rating?.aura_mu || null,
+          aura: rating?.aura_mu || DEFAULT_MU,
           age: age.toString(),
           gender: player.gender,
           photo_url: player.photo_url,

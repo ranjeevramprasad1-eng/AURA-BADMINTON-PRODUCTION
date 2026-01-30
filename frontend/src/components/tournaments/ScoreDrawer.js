@@ -29,7 +29,7 @@ export default function ScoreDrawer({
     <>
       <Drawer open={open} onOpenChange={setOpen}>
         <DrawerTrigger asChild>{trigger}</DrawerTrigger>
-        <DrawerContent>
+        <DrawerContent className="overflow-hidden max-w-[500px] mx-auto">
           <DrawerHeader>
             <DrawerTitle>Add Score - {teamName}</DrawerTitle>
           </DrawerHeader>

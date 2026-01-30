@@ -17,7 +17,7 @@ import {
   update_player_ratings_in_db,
   blended_point_prob,
   match_prob_with_beta_uncertainty,
-} from "@/lib/ratingWinprobLogic";
+} from "@/lib/rating_calculations";
 import {
   broadcastMatchScore,
   broadcastMatchEnd,
@@ -938,7 +938,9 @@ export async function recordPoint(c: Context<AuthContext>) {
     );
 
     console.log(
-      `[Match ${matchId}] Point: ${newScoreA}-${newScoreB}. Win Prob Team A: ${(win_prob_A * 100).toFixed(1)}%`,
+      `[Match ${matchId}] Point: ${newScoreA}-${newScoreB}. Win Prob Team A: ${(
+        win_prob_A * 100
+      ).toFixed(1)}%`,
     );
 
     // Broadcast score update to all connected WebSocket clients
@@ -985,7 +987,7 @@ export async function recordPoint(c: Context<AuthContext>) {
 }
 
 // POST /matches/:id/undo - Undo last point
-export async function undoMatch(c: Context<AuthContext>) {
+export async function undoLastPoint(c: Context<AuthContext>) {
   try {
     const params = (c.req as any).valid("param") as any as z.infer<
       typeof matchIdSchema
@@ -1114,7 +1116,9 @@ export async function undoMatch(c: Context<AuthContext>) {
     );
 
     console.log(
-      `[Match ${matchId}] Undo: ${scoreA}-${scoreB}. Win Prob Team A: ${(win_prob_A * 100).toFixed(1)}%`,
+      `[Match ${matchId}] Undo: ${scoreA}-${scoreB}. Win Prob Team A: ${(
+        win_prob_A * 100
+      ).toFixed(1)}%`,
     );
 
     // Broadcast updated score after undo with win probability

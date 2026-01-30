@@ -18,7 +18,7 @@ import {
   deleteMatch,
   startMatch,
   recordPoint,
-  undoMatch,
+  undoLastPoint,
   getMatchState,
   getRefereeMatches,
 } from "@/controllers/matches.controller";
@@ -95,7 +95,7 @@ matchesRoutes.post(
   "/:id/undo",
   authMiddleware,
   zValidator("param", matchIdSchema),
-  undoMatch
+  undoLastPoint
 );
 
 // GET /matches/:id/state - Get current match state

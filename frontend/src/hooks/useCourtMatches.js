@@ -73,7 +73,7 @@ export function useCourtMatches(tournamentId, courtId, options = {}) {
             // Update match details cache with new scores
             queryClient.setQueryData(['match', 'details', matchId], (oldData) => {
               if (!oldData) return oldData;
-              
+
               const newScore = {
                 id: Date.now(), // Temporary ID
                 match_id: matchId,
@@ -148,13 +148,13 @@ export function useCourtMatches(tournamentId, courtId, options = {}) {
  */
 export function useActiveCourtMatch(tournamentId, courtId, options = {}) {
   const { liveUpdates = false } = options;
-  
+
   const matchesQuery = useCourtMatches(tournamentId, courtId, { liveUpdates });
-  
+
   // Get the active match (in_progress or most recent)
   const activeMatch = matchesQuery.data?.find(
-    (m) => m.status === 'in_progress' && m.court_id === parseInt(courtId)
-  ) || matchesQuery.data?.[0];
+    (m) => m.status === 'in_progress' || 'scheduled' && m.court_id === parseInt(courtId)
+  ) || null;
 
   // Fetch detailed match data if we have an active match
   const matchDetailsQuery = useQuery({

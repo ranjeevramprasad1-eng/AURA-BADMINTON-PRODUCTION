@@ -24,7 +24,7 @@ import { startNextRound, setMatchWinner, setAllTeam1Winners } from "@/lib/tourna
 import { getTournamentInfo, getStandings, getMatches, getNextAction, getRegisteredTeams } from "@/lib/tournamentStatus";
 import { getTournamentRounds as getSortedRounds, parseRoundsFromMetadata } from "@/utils/rounds";
 import { POINTS_TO_WIN } from "@/lib/scoring";
-import { blended_point_prob, match_prob_with_beta_uncertainty } from "@/lib/ratingWinprobLogic";
+import { blended_point_prob, DEFAULT_MU, DEFAULT_SIGMA, match_prob_with_beta_uncertainty } from "@/lib/rating_calculations";
 import { broadcastPairingsGenerated, broadcastUserUpdate } from "@/lib/websocket";
 
 // GET /tournaments - Get all tournaments with filtering
@@ -1019,8 +1019,8 @@ export async function getMatchDetails(c: Context<AuthContext>) {
         const r = ratingData?.find((x: any) => x.player_id === id);
         return {
           id,
-          mu: r?.aura_mu ?? 25.0,
-          sigma: r?.aura_sigma ?? 8.33
+          mu: r?.aura_mu ?? DEFAULT_MU,
+          sigma: r?.aura_sigma ?? DEFAULT_SIGMA
         };
       };
 
@@ -1068,7 +1068,7 @@ export async function getMatchDetails(c: Context<AuthContext>) {
               photo_url: player?.photo_url,
               team_id: teamId,
               team: teamIndex === 0 ? "A" : "B",
-              aura: ratingsMap.get(player?.id) || null,
+              aura: ratingsMap.get(player?.id) || DEFAULT_MU,
               created_at: tm.created_at,
             };
           }) || [];
