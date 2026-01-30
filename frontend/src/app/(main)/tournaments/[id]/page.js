@@ -562,7 +562,7 @@ export default function TournamentDetailsPage() {
                   onClick={() => setIsInviteDialogOpen(true)}
                 >
                   <UserPlus className="size-4 mr-2" />
-                  {currentTeamId ? "Manage Team" : "Invite Partner"}
+                  {currentTeamId && teamComplete ? "View Team" : "Invite Partner"}
                 </Button>
               )}
               {isDoubles && teamComplete && new Date(start_date) > new Date() && (
