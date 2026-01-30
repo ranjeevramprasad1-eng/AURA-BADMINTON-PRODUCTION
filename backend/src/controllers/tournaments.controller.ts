@@ -2695,6 +2695,19 @@ export async function deleteTournament(c: Context<AuthContext>) {
     const inviteTeamIds = invitesWithTeams?.map((inv: any) => inv.team_id).filter((id: any) => id != null) || [];
     teamIds = [...new Set([...teamIds, ...inviteTeamIds])];
 
+    // Get all teams that belong to this tournament (teams.tournament_id) so we remove every team referencing the tournament
+    const { data: teamsByTournament, error: teamsByTournamentError } = await supabase
+      .from("teams")
+      .select("team_id")
+      .eq("tournament_id", tournamentId);
+
+    if (teamsByTournamentError) {
+      throw new HTTPException(500, { message: teamsByTournamentError.message });
+    }
+
+    const tournamentTeamIds = teamsByTournament?.map((t: any) => t.team_id) || [];
+    teamIds = [...new Set([...teamIds, ...tournamentTeamIds])];
+
     // Delete pairings
     if (allPairingIds.length > 0) {
       const { error: pairingsDeleteError } = await supabase
@@ -2784,6 +2797,7 @@ export async function deleteTournament(c: Context<AuthContext>) {
 
     return c.json({ data: { success: true } });
   } catch (error) {
+    console.log("Error Deleting Tournament");
     if (error instanceof HTTPException) {
       throw error;
     }

@@ -242,7 +242,9 @@ create table public.team_members (
 create table public.teams (
   team_id serial not null,
   created_at timestamp with time zone null default now(),
-  constraint teams_pkey primary key (team_id)
+  tournament_id integer null,
+  constraint teams_pkey primary key (team_id),
+  constraint teams_tournament_id_fkey foreign KEY (tournament_id) references tournaments (id)
 ) TABLESPACE pg_default;
 
 
