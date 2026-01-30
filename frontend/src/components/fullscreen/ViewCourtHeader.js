@@ -7,12 +7,12 @@ import { ArrowLeft, Play, Pause, Square } from 'lucide-react';
  * ViewCourtHeader Component
  * Header for the fullscreen court view
  */
-export function ViewCourtHeader({ 
-  tournamentName, 
-  courtNumber, 
-  status, 
-  statusText, 
-  round, 
+export function ViewCourtHeader({
+  tournamentName,
+  courtNumber,
+  status,
+  statusText,
+  round,
   onBack,
   progressPercentage,
   isPaused,
@@ -25,30 +25,30 @@ export function ViewCourtHeader({
   return (
     <header className="absolute top-0 left-0 right-0 z-20 pointer-events-auto pt-safe-top">
       {/* Progress Timer Bar */}
-      <div className="w-full h-1 bg-muted/30">
+      <div className="w-full h-1 bg-muted/30 hidden">
         <div
           className="h-full bg-primary transition-all duration-100 ease-linear"
           style={{ width: `${progressPercentage}%` }}
         />
       </div>
-      
-      <div className="flex items-center justify-between px-4 py-3 bg-linear-to-b from-background/95 via-background/90 to-transparent backdrop-blur-md">
-        <div className="flex items-center gap-3">
+
+      <div className="flex items-center justify-between px-4 py-3 bg-linear-to-b from-background/10 via-background/5 to-transparent">
+        <div className="flex gap-3">
           <Button
             variant="ghost"
             size="icon"
             onClick={onBack}
-            className="rounded-full bg-background/80 backdrop-blur-md text-foreground hover:bg-background hover:text-foreground border border-border/50"
+            className="rounded-full text-white hover:bg-white/10 hover:text-background"
           >
             <ArrowLeft className="size-5" />
           </Button>
           <div>
             {tournamentName && (
-              <h2 className="text-xl font-black italic tracking-tighter text-foreground">
+              <h2 className="text-xl font-black italic tracking-tighter text-white">
                 {tournamentName}
               </h2>
             )}
-            <p className="text-xs text-muted-foreground mt-0.5">
+            <p className="text-xs text-white/50 mt-0.5">
               Court {courtNumber}
             </p>
           </div>
@@ -63,11 +63,11 @@ export function ViewCourtHeader({
             onStop={onStop}
             onReset={onReset}
           /> */}
-          
+
           <div className="text-right">
             <StatusBadge status={status} statusText={statusText} />
             {round && (
-              <p className="text-xs text-muted-foreground mt-1.5">Round {round}</p>
+              <p className="text-xs text-white/50 mt-1.5">Round {round}</p>
             )}
           </div>
         </div>

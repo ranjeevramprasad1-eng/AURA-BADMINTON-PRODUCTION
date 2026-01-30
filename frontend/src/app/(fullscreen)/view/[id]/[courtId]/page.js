@@ -19,6 +19,7 @@ import { StandingsDisplay } from "@/components/fullscreen/StandingsDisplay";
 import { DISPLAY_TIMER_CONFIG } from "@/constants/displayTimer";
 import { getGroupKeys } from "@/lib/utils/tournament";
 import { createWebSocketConnection } from "@/lib/websocket";
+import { cn } from "@/lib/utils";
 
 /**
  * ViewCourtPage Component
@@ -299,8 +300,8 @@ export default function ViewCourtPage() {
   }[status] || status;
 
   return (
-    <ScrollablePage className="h-dvh bg-background">
-      <ScrollablePageHeader className="relative bg-transparent pointer-events-none">
+    <ScrollablePage className="h-dvh bg-[#5b584f] bg-linear-to-t from-background/10 via-background/0 to-transparent">
+      <ScrollablePageHeader className="relative bg-transparent pointer-events-none ">
         <ViewCourtHeader
           tournamentName={match?.tournaments?.name}
           courtNumber={match?.courts?.court_number || courtId}
@@ -354,16 +355,12 @@ export default function ViewCourtPage() {
  */
 function ScoreSection({ showStandings, teamA, teamB, scoreA, scoreB, scoreAnimation, matchEnded, match }) {
   return (
-    <div className={`${showStandings ? '' : 'w-full h-full'
-      } transition-all duration-500 flex items-center justify-center`}>
-      <div className="w-full h-full relative flex flex-col items-center justify-center">
-        {/* Abstract Background Shapes - Full Screen */}
-        <div className="absolute top-0 inset-x-0 inset-y-0 bg-linear-to-b from-brand-blue/10 to-transparent skew-y-3 origin-top-left scale-110 pointer-events-none -z-10" />
-        <div className="absolute top-0 right-0 size-64 bg-primary/5 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none -z-10" />
+    <div className={cn(showStandings ? '' : 'w-full h-full', "transition-all duration-500 flex items-center justify-center")}>
+      <div className="size-full relative flex flex-col items-center justify-center">
 
         {/* Players Grid - Same as match page */}
-        <div className="w-full px-8 py-4">
-          <div className="grid grid-cols-3 gap-8 md:gap-12 lg:gap-16 items-center">
+        <div className="w-full px-8 py-4 pb-0">
+          <div className="grid grid-cols-3 gap-8 items-center">
             {/* Team A - Left Column */}
             <motion.div
               className="flex flex-col items-center gap-4"
@@ -387,7 +384,7 @@ function ScoreSection({ showStandings, teamA, teamB, scoreA, scoreB, scoreAnimat
                 >
                   <div className="relative mb-4">
                     <motion.div
-                      className="size-32 md:size-40 lg:size-48 bg-linear-to-br from-brand-blue to-blue-600 rounded-full flex items-center justify-center text-white font-black text-2xl md:text-3xl lg:text-4xl border-4 border-background shadow-lg"
+                      className="size-32 bg-linear-to-br from-brand-blue to-blue-600/50 rounded-full flex items-center justify-center text-blue-100/90 font-black text-3xl border-4 border-background/10 shadow-lg"
                       whileHover={{
                         scale: 1.1,
                         boxShadow: "0 10px 25px rgba(59, 130, 246, 0.4)",
@@ -398,7 +395,7 @@ function ScoreSection({ showStandings, teamA, teamB, scoreA, scoreB, scoreAnimat
                     </motion.div>
                   </div>
                   <motion.p
-                    className="text-2xl font-bold text-center truncate max-w-[120px] md:max-w-[160px] lg:max-w-[200px]"
+                    className="text-xl font-bold text-center truncate max-w-[120px] md:max-w-[160px] lg:max-w-[200px] text-white/90"
                     whileHover={{ color: "#3b82f6" }}
                     transition={{ duration: 0.2 }}
                   >
@@ -409,7 +406,7 @@ function ScoreSection({ showStandings, teamA, teamB, scoreA, scoreB, scoreAnimat
             </motion.div>
 
             {/* Score - Middle Column */}
-            <div className="flex flex-col items-center">
+            <div className="flex flex-col items-center mt-8">
               <motion.div
                 className="text-center font-black text-8xl md:text-9xl lg:text-[12rem] xl:text-[16rem] tracking-tighter mb-2"
                 key={`${scoreA}-${scoreB}`}
@@ -422,15 +419,15 @@ function ScoreSection({ showStandings, teamA, teamB, scoreA, scoreB, scoreAnimat
                   ease: "easeOut",
                 }}
               >
-                <span className={scoreA > scoreB ? "text-foreground" : "text-muted-foreground"}>{scoreA}</span>
-                <span className="text-muted-foreground/30 mx-12">-</span>
-                <span className={scoreB > scoreA ? "text-foreground" : "text-muted-foreground"}>{scoreB}</span>
+                <span className={scoreA > scoreB ? "text-white" : "text-white/70"}>{scoreA}</span>
+                <span className="text-white/30 mx-12">-</span>
+                <span className={scoreB > scoreA ? "text-white" : "text-white/30"}>{scoreB}</span>
               </motion.div>
 
               <div className="flex items-center gap-3 mt-4">
-                <div className={`size-3 md:size-4 rounded-full ${scoreA > scoreB ? "bg-brand-blue" : "bg-muted"}`} />
-                <span className="text-5xl font-bold uppercase tracking-widest text-muted-foreground">VS</span>
-                <div className={`size-3 md:size-4 rounded-full ${scoreB > scoreA ? "bg-brand-green" : "bg-muted"}`} />
+                <div className={`size-3 md:size-4 rounded-full ${scoreA > scoreB ? "bg-linear-to-br from-brand-blue to-blue-600/50" : "bg-linear-to-br from-brand-muted to-blue-600/50"}`} />
+                <span className="text-5xl font-bold uppercase tracking-widest text-white/30">VS</span>
+                <div className={`size-3 md:size-4 rounded-full ${scoreB > scoreA ? "bg-linear-to-br from-brand-green/50 via-green-600 to-green-600/50" : "bg-linear-to-br from-brand-muted to-green-600/50"}`} />
               </div>
 
               {/* Match Completed Indicator */}
@@ -448,6 +445,7 @@ function ScoreSection({ showStandings, teamA, teamB, scoreA, scoreB, scoreAnimat
                   </div>
                 </motion.div>
               )}
+              <MatchInfoFooter match={match} />
             </div>
 
             {/* Team B - Right Column */}
@@ -473,7 +471,7 @@ function ScoreSection({ showStandings, teamA, teamB, scoreA, scoreB, scoreAnimat
                 >
                   <div className="relative mb-4">
                     <motion.div
-                      className="size-32 md:size-40 lg:size-48 bg-green-600/90 rounded-full flex items-center justify-center text-white font-black text-2xl md:text-3xl lg:text-4xl border-4 border-background shadow-lg"
+                      className="size-32 bg-linear-to-br from-brand-green/50 via-green-600 to-green-600/50 rounded-full flex items-center justify-center text-green-100/90 font-black text-3xl border-4 border-background/40 shadow-lg"
                       whileHover={{
                         scale: 1.1,
                         boxShadow: "0 10px 25px rgba(16, 185, 129, 0.4)",
@@ -484,7 +482,7 @@ function ScoreSection({ showStandings, teamA, teamB, scoreA, scoreB, scoreAnimat
                     </motion.div>
                   </div>
                   <motion.p
-                    className="text-2xl font-bold text-center truncate max-w-[120px] md:max-w-[160px] lg:max-w-[200px]"
+                    className="text-2xl font-bold text-center truncate max-w-[120px] md:max-w-[160px] lg:max-w-[200px] text-white/90"
                     whileHover={{ color: "#10b981" }}
                     transition={{ duration: 0.2 }}
                   >
@@ -496,7 +494,6 @@ function ScoreSection({ showStandings, teamA, teamB, scoreA, scoreB, scoreAnimat
           </div>
         </div>
 
-        <MatchInfoFooter match={match} />
       </div>
     </div>
   );
@@ -508,17 +505,17 @@ function ScoreSection({ showStandings, teamA, teamB, scoreA, scoreB, scoreAnimat
  */
 function MatchInfoFooter({ match }) {
   return (
-    <div className="mt-12 md:mt-16 text-center space-y-3">
+    <div className="mt-4 text-center space-y-3">
       {match?.start_time && (
-        <div className="bg-muted/20 rounded-xl p-3 border border-border/50 inline-block">
-          <p className="text-sm md:text-lg text-muted-foreground font-medium">
+        <div className="bg-background/20 rounded-xl p-3 border border-white/20 inline-block">
+          <p className="text-sm md:text-lg text-white/70 font-medium">
             Started: {new Date(match.start_time).toLocaleTimeString()}
           </p>
         </div>
       )}
-      {match?.refree_id && (
-        <p className="text-xs md:text-sm text-muted-foreground/70 uppercase tracking-wide font-medium">
-          Referee Assigned
+      {!match?.refree_id && (
+        <p className="text-xs md:text-sm text-white/70 uppercase tracking-wide font-medium">
+          No Referee Assigned yet
         </p>
       )}
     </div>
