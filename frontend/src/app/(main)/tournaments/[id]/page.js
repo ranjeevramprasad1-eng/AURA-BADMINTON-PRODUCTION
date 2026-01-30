@@ -7,7 +7,6 @@ import { useUser } from "@/hooks/useUser";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { tournamentsApi, tournamentEngineApi } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import {
   Drawer,
   DrawerContent,
@@ -18,8 +17,6 @@ import {
 } from "@/components/ui/drawer";
 import {
   ArrowLeft,
-  MoreVertical,
-  Phone,
   MapPin,
   Clock,
   Calendar,
@@ -37,6 +34,7 @@ import { toast } from "sonner";
 import { TeamInviteDialog } from "@/components/tournaments/TeamInviteDialog";
 import { useTournamentInvites } from "@/hooks/useTournamentInvites";
 import { UserPlus } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function TournamentDetailsPage() {
   const params = useParams();
@@ -46,7 +44,6 @@ export default function TournamentDetailsPage() {
   const { data: userData } = useUser();
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false);
-  const [teamId, setTeamId] = useState(null);
   const { invites } = useTournamentInvites(params.id);
 
   // Fetch teams for the tournament
@@ -81,7 +78,7 @@ export default function TournamentDetailsPage() {
 
   // Get team ID from invites (check all invites, not just accepted)
   const allInvites = invites || [];
-  const currentTeamId = allInvites[0]?.team_id || teamId;
+  const currentTeamId = allInvites[0]?.team_id || null;
 
   // Check if team is complete (2 players for doubles)
   // Team is complete when there's at least 1 accepted invite (inviter + invitee = 2 members)
@@ -106,7 +103,64 @@ export default function TournamentDetailsPage() {
   });
 
   if (isLoading) {
-    return <div className="p-4 text-center">Loading...</div>;
+    return (
+      <ScrollablePage className="h-dvh bg-background">
+        <ScrollablePageHeader className="relative bg-transparent pointer-events-none">
+          <header className="absolute top-0 left-0 right-0 z-20 pointer-events-auto pt-safe-top">
+            <div className="flex items-center justify-between px-4 py-3 bg-linear-to-b from-black/50 to-transparent">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => router.back()}
+                className="rounded-full bg-background/20 backdrop-blur-md text-white hover:bg-background/40 hover:text-white"
+              >
+                <ArrowLeft className="size-5" />
+              </Button>
+            </div>
+          </header>
+        </ScrollablePageHeader>
+        <ScrollablePageContent className="space-y-0 pb-24">
+          <div className="relative h-[45vh] w-full overflow-hidden">
+            <div className="absolute bottom-0 left-0 right-0 p-6 z-10">
+              <Skeleton className="px-2 py-0.5 rounded w-16 h-4 mb-2" />
+              <h1 className="text-3xl font-black italic tracking-tighter text-foreground mb-2 leading-none">
+                <Skeleton className="w-5/6 h-8" />
+              </h1>
+              <div className="flex items-center gap-4 text-sm font-medium text-muted-foreground">
+                <div className="flex items-center gap-1.5">
+                  <Skeleton className="size-4" />
+                  <Skeleton className="w-16 h-4" />
+                </div>
+                <div className="size-1 rounded-full bg-muted-foreground/50" />
+                <div className="flex items-center gap-1.5">
+                  <Skeleton className="size-4" />
+                  <Skeleton className="w-16 h-4" />
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="px-4 space-y-6 pt-2">
+            <div className="grid grid-cols-3 gap-3">
+              <Skeleton className="w-full h-24" />
+              <Skeleton className="w-full h-24" />
+              <Skeleton className="w-full h-24" />
+            </div>
+            <div className="space-y-2">
+              <Skeleton className="w-1/2 h-8" />
+              <Skeleton className="w-full h-8" />
+            </div>
+            <div className="space-y-3">
+              <Skeleton className="w-1/2 h-8" />
+              <Skeleton className="w-full h-14" />
+              <Skeleton className="w-full h-14" />
+              <Skeleton className="w-full h-14" />
+              <Skeleton className="w-full h-14" />
+              <Skeleton className="w-full h-14" />
+            </div>
+          </div>
+        </ScrollablePageContent>
+      </ScrollablePage>
+    );
   }
 
   if (!tournament) {
@@ -135,7 +189,7 @@ export default function TournamentDetailsPage() {
   const registeredCount = registered_count || 0;
   const progress = capacity > 0 ? (registeredCount / capacity) * 100 : 0;
   const isFull = capacity > 0 && registeredCount >= capacity;
-  
+
   // Check if tournament has started (start_time has passed or any round has begun)
   const startTime = new Date(start_date);
   const now = new Date();
@@ -143,14 +197,16 @@ export default function TournamentDetailsPage() {
   const hasRoundBegun = metadata?.current_round > 0 || metadata?.stage !== 'registration';
   const tournamentStarted = hasStarted || hasRoundBegun;
 
+  const isHostReferee = referee?.some((ref) => ref.name === hosted_by.name);
+
   return (
     <ScrollablePage className="h-dvh bg-background">
       <ScrollablePageHeader className="relative bg-transparent pointer-events-none">
         <header className="absolute top-0 left-0 right-0 z-20 pointer-events-auto pt-safe-top">
           <div className="flex items-center justify-between px-4 py-3 bg-linear-to-b from-black/50 to-transparent">
-            <Button 
-              variant="ghost" 
-              size="icon" 
+            <Button
+              variant="ghost"
+              size="icon"
               onClick={() => router.back()}
               className="rounded-full bg-background/20 backdrop-blur-md text-white hover:bg-background/40 hover:text-white"
             >
@@ -163,7 +219,7 @@ export default function TournamentDetailsPage() {
 
       <ScrollablePageContent className="space-y-0 pb-24">
         {/* Hero Section */}
-        <div className="relative h-[45vh] w-full overflow-hidden">
+        <div className="relative h-[45svh] w-full overflow-hidden">
           {image_url ? (
             <img
               src={image_url}
@@ -171,225 +227,225 @@ export default function TournamentDetailsPage() {
               className="w-full h-full object-cover"
             />
           ) : (
-             <div className="w-full h-full bg-linear-to-br from-brand-blue to-teal-600 relative flex items-center justify-center">
-                 <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_center,var(--tw-gradient-stops))] from-white to-transparent" />
-             </div>
+            <div className="w-full h-full bg-linear-to-br from-brand-blue to-teal-600 relative flex items-center justify-center">
+              <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_center,var(--tw-gradient-stops))] from-white to-transparent" />
+            </div>
           )}
           <div className="absolute inset-0 bg-linear-to-t from-background via-background/60 to-transparent" />
-          
+
           <div className="absolute bottom-0 left-0 right-0 p-6 z-10">
-              <div className="flex items-center gap-2 mb-2">
-                 <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-primary text-primary-foreground">
-                    {category}
-                 </span>
-                 {tournament?.status === 'live' && (
-                    <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-red-500 text-white animate-pulse">
-                        Live
-                    </span>
-                 )}
+            <div className="flex items-center gap-2 mb-2">
+              <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-primary text-primary-foreground">
+                {category}
+              </span>
+              {tournament?.status === 'live' && (
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-red-500 text-white animate-pulse">
+                  Live
+                </span>
+              )}
+            </div>
+            <h1 className="text-3xl font-black italic tracking-tighter text-foreground mb-2 leading-none">
+              {name}
+            </h1>
+            <div className="flex items-center gap-4 text-sm font-medium text-muted-foreground">
+              <div className="flex items-center gap-1.5">
+                <MapPin className="size-4" />
+                <span>{venue?.name || "TBD"}</span>
               </div>
-              <h1 className="text-3xl font-black italic tracking-tighter text-foreground mb-2 leading-none">
-                  {name}
-              </h1>
-              <div className="flex items-center gap-4 text-sm font-medium text-muted-foreground">
-                 <div className="flex items-center gap-1.5">
-                    <MapPin className="size-4" />
-                    <span>{venue?.name || "TBD"}</span>
-                 </div>
-                 <div className="w-1 h-1 rounded-full bg-muted-foreground/50" />
-                 <div className="flex items-center gap-1.5">
-                    <Calendar className="size-4" />
-                    <span>{formatDateWithDay(start_date)}</span>
-                 </div>
+              <div className="w-1 h-1 rounded-full bg-muted-foreground/50" />
+              <div className="flex items-center gap-1.5">
+                <Calendar className="size-4" />
+                <span>{formatDateWithDay(start_date)}</span>
               </div>
+            </div>
           </div>
         </div>
 
         <div className="px-4 space-y-6 pt-2">
-            {/* Quick Stats Row */}
-            <div className="grid grid-cols-3 gap-3">
-                <div className="bg-muted/30 rounded-xl p-3 border border-border/50 flex flex-col items-center justify-center text-center">
-                    <Clock className="size-5 text-primary mb-1" />
-                    <span className="text-[10px] uppercase font-bold text-muted-foreground">Time</span>
-                    <span className="text-xs font-bold">{formatTime(start_date)}</span>
-                </div>
-                <div className="bg-muted/30 rounded-xl p-3 border border-border/50 flex flex-col items-center justify-center text-center">
-                    <Users className="size-5 text-primary mb-1" />
-                    <span className="text-[10px] uppercase font-bold text-muted-foreground">Spots</span>
-                    <span className="text-xs font-bold">{registeredCount}/{capacity}</span>
-                </div>
-                 <div className="bg-muted/30 rounded-xl p-3 border border-border/50 flex flex-col items-center justify-center text-center">
-                    <Star className="size-5 text-primary mb-1" />
-                    <span className="text-[10px] uppercase font-bold text-muted-foreground">Entry</span>
-                    <span className="text-xs font-bold">{registration_fee > 0 ? `₹${registration_fee}` : "Free"}</span>
-                </div>
+          {/* Quick Stats Row */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="bg-muted/30 rounded-xl p-3 border border-border/50 flex flex-col items-center justify-center text-center">
+              <Clock className="size-5 text-primary mb-1" />
+              <span className="text-[10px] uppercase font-bold text-muted-foreground">Time</span>
+              <span className="text-xs font-bold">{formatTime(start_date)}</span>
             </div>
-
-            {/* Description */}
-            <div className="space-y-2">
-                <h3 className="text-sm font-black uppercase tracking-wider text-muted-foreground">About Event</h3>
-                <p className="text-sm text-foreground/80 leading-relaxed">
-                     {description || "No description provided for this tournament."}
-                </p>
+            <div className="bg-muted/30 rounded-xl p-3 border border-border/50 flex flex-col items-center justify-center text-center">
+              <Users className="size-5 text-primary mb-1" />
+              <span className="text-[10px] uppercase font-bold text-muted-foreground">Spots</span>
+              <span className="text-xs font-bold">{registeredCount}/{capacity}</span>
             </div>
+            <div className="bg-muted/30 rounded-xl p-3 border border-border/50 flex flex-col items-center justify-center text-center">
+              <Star className="size-5 text-primary mb-1" />
+              <span className="text-[10px] uppercase font-bold text-muted-foreground">Entry</span>
+              <span className="text-xs font-bold">{registration_fee > 0 ? `₹${registration_fee}` : "Free"}</span>
+            </div>
+          </div>
 
-            {/* Host & Referees */}
-            <div className="space-y-3">
-                <h3 className="text-sm font-black uppercase tracking-wider text-muted-foreground">Organizers</h3>
-                
-                {/* Host */}
-                {hosted_by && (
-                    <div className="flex items-center gap-3 bg-muted/20 p-3 rounded-xl border border-border/50">
-                         {hosted_by.photo_url ? (
-                            <img src={hosted_by.photo_url} alt={hosted_by.name} className="size-10 rounded-full object-cover ring-2 ring-primary/10" />
-                         ) : (
-                             <div className="size-10 rounded-full bg-muted flex items-center justify-center text-muted-foreground font-bold border border-border">
-                                 {hosted_by.name?.[0]?.toUpperCase()}
-                             </div>
-                         )}
-                         <div className="flex-1">
-                             <p className="text-sm font-bold">{hosted_by.name}</p>
-                             <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Tournament Host</p>
-                         </div>
-                    </div>
+          {/* Description */}
+          <div className="space-y-2">
+            <h3 className="text-sm font-black uppercase tracking-wider text-muted-foreground">About Event</h3>
+            <p className="text-sm text-foreground/80 leading-relaxed">
+              {description || "No description provided for this tournament."}
+            </p>
+          </div>
+
+          {/* Host & Referees */}
+          <div className="space-y-3">
+            <h3 className="text-sm font-black uppercase tracking-wider text-muted-foreground">Organizers</h3>
+
+            {/* Host */}
+            {hosted_by && (
+              <div className="flex items-center gap-3 bg-muted/20 p-3 rounded-xl border border-border/50">
+                {hosted_by.photo_url ? (
+                  <img src={hosted_by.photo_url} alt={hosted_by.name} className="size-10 rounded-full object-cover ring-2 ring-primary/10" />
+                ) : (
+                  <div className="size-10 rounded-full bg-muted flex items-center justify-center text-muted-foreground font-bold border border-border">
+                    {hosted_by.name?.[0]?.toUpperCase()}
+                  </div>
                 )}
+                <div className="flex-1">
+                  <p className="text-sm font-bold">{hosted_by.name}</p>
+                  <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Tournament Host {isHostReferee ? " & Referee" : ""}</p>
+                </div>
+              </div>
+            )}
 
-                {/* Referees */}
-                {referee?.map((ref, i) => (
-                    <div key={i} className="flex items-center gap-3 bg-muted/20 p-3 rounded-xl border border-border/50">
-                         {ref.photo_url ? (
-                            <img src={ref.photo_url} alt={ref.name} className="size-10 rounded-full object-cover ring-2 ring-primary/10" />
-                         ) : (
-                             <div className="size-10 rounded-full bg-muted flex items-center justify-center text-muted-foreground font-bold border border-border">
-                                 {ref.name?.[0]?.toUpperCase()}
-                             </div>
-                         )}
-                         <div className="flex-1">
-                             <p className="text-sm font-bold">{ref.name}</p>
-                             <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">{ref.role || "Official Referee"}</p>
-                         </div>
+            {/* Referees */}
+            {referee?.filter((ref) => hosted_by.name !== ref.name).map((ref, i) => (
+              <div key={i} className="flex items-center gap-3 bg-muted/20 p-3 rounded-xl border border-border/50">
+                {ref.photo_url ? (
+                  <img src={ref.photo_url} alt={ref.name} className="size-10 rounded-full object-cover ring-2 ring-primary/10" />
+                ) : (
+                  <div className="size-10 rounded-full bg-muted flex items-center justify-center text-muted-foreground font-bold border border-border">
+                    {ref.name?.[0]?.toUpperCase()}
+                  </div>
+                )}
+                <div className="flex-1">
+                  <p className="text-sm font-bold">{ref.name}</p>
+                  <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">{ref.role || "Official Referee"}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Registered Players / Teams */}
+          <div className="space-y-3 pb-8">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-black uppercase tracking-wider text-muted-foreground">
+                {teamsData?.teams && teamsData.teams.length > 0 ? `Teams (${teamsData.teams.length})` : `Roster (${registeredCount})`}
+              </h3>
+              {progress > 0 && (
+                <div className="text-xs font-bold text-primary">{Math.round(progress)}% Full</div>
+              )}
+            </div>
+
+            <div className="grid gap-3">
+              {teamsData?.teams && teamsData.teams.length > 0 ? (
+                // Show teams with members
+                teamsData.teams.map((team) => {
+                  // Find player objects for this team
+                  const player1 = registered_players?.find(p => p.id === team.player1_id);
+                  const player2 = registered_players?.find(p => p.id === team.player2_id);
+
+                  // Build team members array
+                  const teamMembers = [];
+                  if (player1) teamMembers.push(player1);
+                  if (player2) teamMembers.push(player2);
+
+                  return (
+                    <div
+                      key={team.team_id}
+                      className="bg-muted/20 rounded-xl border border-border/50 p-3 space-y-2"
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+                          {team.display_name || `Team ${team.team_id}`}
+                        </span>
+                        {team.avg_rating > 0 && (
+                          <span className="text-[10px] text-muted-foreground font-medium flex items-center gap-1">
+                            <Zap className="size-3 fill-primary text-primary" />
+                            {(team.avg_rating || 0).toFixed(1)} Avg
+                          </span>
+                        )}
+                      </div>
+                      <div className="space-y-2">
+                        {teamMembers.length > 0 ? (
+                          teamMembers.map((player) => (
+                            <div
+                              key={player.id}
+                              className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer"
+                              onClick={() => router.push(`/players/${player.id}`)}
+                            >
+                              <div className="relative">
+                                {player.photo_url ? (
+                                  <img src={player.photo_url} alt={player.name} className="size-10 rounded-full object-cover border border-border" />
+                                ) : (
+                                  <div className="size-10 rounded-full bg-muted flex items-center justify-center text-muted-foreground border border-border">
+                                    <Users className="size-5" />
+                                  </div>
+                                )}
+                                <div className="absolute -bottom-1 -right-1 bg-background rounded-full p-0.5 border border-border">
+                                  <div className="bg-green-500 size-2.5 rounded-full" />
+                                </div>
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-bold truncate">{player.name || player.username}</p>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide flex items-center gap-1">
+                                    <Zap className="size-3 fill-primary text-primary" /> {player.aura?.toFixed(1) || "0.0"} Aura
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="text-xs text-muted-foreground/70 italic p-2">
+                            Team members pending...
+                          </div>
+                        )}
+                      </div>
                     </div>
-                ))}
-            </div>
-
-            {/* Registered Players / Teams */}
-            <div className="space-y-3 pb-8">
-                 <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-black uppercase tracking-wider text-muted-foreground">
-                        {teamsData?.teams && teamsData.teams.length > 0 ? `Teams (${teamsData.teams.length})` : `Roster (${registeredCount})`}
-                    </h3>
-                    {progress > 0 && (
-                        <div className="text-xs font-bold text-primary">{Math.round(progress)}% Full</div>
-                    )}
-                 </div>
-                 
-                 <div className="grid gap-3">
-                     {teamsData?.teams && teamsData.teams.length > 0 ? (
-                        // Show teams with members
-                        teamsData.teams.map((team) => {
-                            // Find player objects for this team
-                            const player1 = registered_players?.find(p => p.id === team.player1_id);
-                            const player2 = registered_players?.find(p => p.id === team.player2_id);
-                            
-                            // Build team members array
-                            const teamMembers = [];
-                            if (player1) teamMembers.push(player1);
-                            if (player2) teamMembers.push(player2);
-                            
-                            return (
-                                <div 
-                                    key={team.team_id} 
-                                    className="bg-muted/20 rounded-xl border border-border/50 p-3 space-y-2"
-                                >
-                                    <div className="flex items-center justify-between mb-2">
-                                        <span className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
-                                            {team.display_name || `Team ${team.team_id}`}
-                                        </span>
-                                        {team.avg_rating > 0 && (
-                                            <span className="text-[10px] text-muted-foreground font-medium flex items-center gap-1">
-                                                <Zap className="size-3 fill-primary text-primary" /> 
-                                                {(team.avg_rating || 0).toFixed(1)} Avg
-                                            </span>
-                                        )}
-                                    </div>
-                                    <div className="space-y-2">
-                                        {teamMembers.length > 0 ? (
-                                            teamMembers.map((player) => (
-                                                <div 
-                                                    key={player.id}
-                                                    className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer"
-                                                    onClick={() => router.push(`/players/${player.id}`)}
-                                                >
-                                                    <div className="relative">
-                                                        {player.photo_url ? (
-                                                            <img src={player.photo_url} alt={player.name} className="size-10 rounded-full object-cover border border-border" />
-                                                        ) : (
-                                                            <div className="size-10 rounded-full bg-muted flex items-center justify-center text-muted-foreground border border-border">
-                                                                <Users className="size-5" />
-                                                            </div>
-                                                        )}
-                                                        <div className="absolute -bottom-1 -right-1 bg-background rounded-full p-0.5 border border-border">
-                                                            <div className="bg-green-500 size-2.5 rounded-full" />
-                                                        </div>
-                                                    </div>
-                                                    <div className="flex-1 min-w-0">
-                                                        <p className="text-sm font-bold truncate">{player.name || player.username}</p>
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide flex items-center gap-1">
-                                                                <Zap className="size-3 fill-primary text-primary" /> {player.aura?.toFixed(1) || "0.0"} Aura
-                                                            </span>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            ))
-                                        ) : (
-                                            <div className="text-xs text-muted-foreground/70 italic p-2">
-                                                Team members pending...
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                            );
-                        })
-                     ) : registered_players && registered_players.length > 0 ? (
-                        // Fallback to flat list if no teams
-                        registered_players.map((player) => (
-                             <div 
-                                key={player.id} 
-                                className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer"
-                                onClick={() => router.push(`/players/${player.id}`)}
-                             >
-                                <div className="relative">
-                                    {player.photo_url ? (
-                                        <img src={player.photo_url} alt={player.name} className="size-10 rounded-full object-cover border border-border" />
-                                    ) : (
-                                        <div className="size-10 rounded-full bg-muted flex items-center justify-center text-muted-foreground border border-border">
-                                            <Users className="size-5" />
-                                        </div>
-                                    )}
-                                    <div className="absolute -bottom-1 -right-1 bg-background rounded-full p-0.5 border border-border">
-                                        <div className="bg-green-500 size-2.5 rounded-full" />
-                                    </div>
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-bold truncate">{player.name || player.username}</p>
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide flex items-center gap-1">
-                                            <Zap className="size-3 fill-primary text-primary" /> {player.aura?.toFixed(1) || "0.0"} Aura
-                                        </span>
-                                    </div>
-                                </div>
-                             </div>
-                        ))
-                     ) : (
-                        <div className="text-center py-8 bg-muted/20 rounded-xl border border-dashed border-border">
-                            <Users className="size-8 mx-auto text-muted-foreground/30 mb-2" />
-                            <p className="text-sm text-muted-foreground font-medium">No players registered yet.</p>
-                            <p className="text-xs text-muted-foreground/70">Be the first to join!</p>
+                  );
+                })
+              ) : registered_players && registered_players.length > 0 ? (
+                // Fallback to flat list if no teams
+                registered_players.map((player) => (
+                  <div
+                    key={player.id}
+                    className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer"
+                    onClick={() => router.push(`/players/${player.id}`)}
+                  >
+                    <div className="relative">
+                      {player.photo_url ? (
+                        <img src={player.photo_url} alt={player.name} className="size-10 rounded-full object-cover border border-border" />
+                      ) : (
+                        <div className="size-10 rounded-full bg-muted flex items-center justify-center text-muted-foreground border border-border">
+                          <Users className="size-5" />
                         </div>
-                     )}
-                 </div>
+                      )}
+                      <div className="absolute -bottom-1 -right-1 bg-background rounded-full p-0.5 border border-border">
+                        <div className="bg-green-500 size-2.5 rounded-full" />
+                      </div>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold truncate">{player.name || player.username}</p>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide flex items-center gap-1">
+                          <Zap className="size-3 fill-primary text-primary" /> {player.aura?.toFixed(1) || "0.0"} Aura
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-8 bg-muted/20 rounded-xl border border-dashed border-border">
+                  <Users className="size-8 mx-auto text-muted-foreground/30 mb-2" />
+                  <p className="text-sm text-muted-foreground font-medium">No players registered yet.</p>
+                  <p className="text-xs text-muted-foreground/70">Be the first to join!</p>
+                </div>
+              )}
             </div>
+          </div>
         </div>
 
       </ScrollablePageContent>
@@ -442,8 +498,8 @@ export default function TournamentDetailsPage() {
                 {isFull && !tournamentStarted
                   ? "Tournament Full"
                   : tournamentStarted || tournament?.registered || (isDoubles && teamComplete)
-                  ? "View Pairings & Leaderboard"
-                  : "Book Your Spot"}
+                    ? "View Pairings & Leaderboard"
+                    : "Book Your Spot"}
               </Button>
             </>
           )}
@@ -536,8 +592,8 @@ export default function TournamentDetailsPage() {
               {registrationMutation.isPending
                 ? "Registering..."
                 : isFull
-                ? "Tournament Full"
-                : "Confirm Registration"}
+                  ? "Tournament Full"
+                  : "Confirm Registration"}
             </Button>
             <Button
               variant="outline"
