@@ -176,50 +176,53 @@ export function TeamInviteDrawer({ open, onOpenChange, tournamentId, teamId }) {
           <TabsContent value="friends" className="mt-0 flex-1 overflow-y-auto space-y-4 min-h-0">
             {/* Invite from Friends List */}
             <div>
-              <Label htmlFor="friend-select">Select Friend</Label>
               <div className="mt-2 space-y-2">
                 {isLoadingFriends ? (
                   <p className="text-sm text-gray-500">Loading friends...</p>
                 ) : friends.length === 0 ? (
-                  <p className="text-sm text-gray-500">No friends yet. Add friends to invite them.</p>
+                  <p className="text-sm text-gray-500 text-center py-4 h-32 flex items-center justify-center border-2 border-dashed border-gray-300 rounded-lg">No friends yet. Add friends to invite them.</p>
                 ) : (
-                  <div className="max-h-48 overflow-y-auto space-y-2">
-                    {friends.map((friend) => {
-                      const friendPlayer = friend.player || friend.friend;
-                      return (
-                        <Card
-                          key={friend.id}
-                          className={`p-3 cursor-pointer transition-colors ${selectedFriendId === friendPlayer?.id
-                            ? "bg-purple-100 border-purple-500"
-                            : "hover:bg-gray-50"
-                            }`}
-                          onClick={() => setSelectedFriendId(friendPlayer?.id)}
-                        >
-                          <div className="flex items-center gap-3">
-                            {friendPlayer?.photo_url ? (
-                              <img
-                                src={friendPlayer.photo_url}
-                                alt={friendPlayer.username}
-                                className="size-10 rounded-full object-cover"
-                              />
-                            ) : (
-                              <div className="size-10 rounded-full bg-gray-200 flex items-center justify-center">
-                                <span className="text-sm font-bold text-gray-600">
-                                  {(friendPlayer?.username || "F")[0].toUpperCase()}
-                                </span>
+                  <>
+                    <Label htmlFor="friend-select">Select Friend</Label>
+
+                    <div className="max-h-48 overflow-y-auto space-y-2">
+                      {friends.map((friend) => {
+                        const friendPlayer = friend.player || friend.friend;
+                        return (
+                          <Card
+                            key={friend.id}
+                            className={`p-3 cursor-pointer transition-colors ${selectedFriendId === friendPlayer?.id
+                              ? "bg-purple-100 border-purple-500"
+                              : "hover:bg-gray-50"
+                              }`}
+                            onClick={() => setSelectedFriendId(friendPlayer?.id)}
+                          >
+                            <div className="flex items-center gap-3">
+                              {friendPlayer?.photo_url ? (
+                                <img
+                                  src={friendPlayer.photo_url}
+                                  alt={friendPlayer.username}
+                                  className="size-10 rounded-full object-cover"
+                                />
+                              ) : (
+                                <div className="size-10 rounded-full bg-gray-200 flex items-center justify-center">
+                                  <span className="text-sm font-bold text-gray-600">
+                                    {(friendPlayer?.username || "F")[0].toUpperCase()}
+                                  </span>
+                                </div>
+                              )}
+                              <div className="flex-1">
+                                <p className="font-medium">{friendPlayer?.username}</p>
                               </div>
-                            )}
-                            <div className="flex-1">
-                              <p className="font-medium">{friendPlayer?.username}</p>
+                              {selectedFriendId === friendPlayer?.id && (
+                                <Check className="size-5 text-purple-600" />
+                              )}
                             </div>
-                            {selectedFriendId === friendPlayer?.id && (
-                              <Check className="size-5 text-purple-600" />
-                            )}
-                          </div>
-                        </Card>
-                      );
-                    })}
-                  </div>
+                          </Card>
+                        );
+                      })}
+                    </div>
+                  </>
                 )}
               </div>
               {
