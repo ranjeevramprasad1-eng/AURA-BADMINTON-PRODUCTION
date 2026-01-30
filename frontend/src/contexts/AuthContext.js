@@ -84,8 +84,8 @@ export function AuthProvider({ children }) {
   const signUp = async (email, password, metadata = {}) => {
     try {
       // Get the current origin for email redirect
-      const redirectTo = typeof window !== 'undefined' 
-        ? `${window.location.origin}/` 
+      const redirectTo = typeof window !== 'undefined'
+        ? `${window.location.origin}/`
         : undefined;
 
       const { data, error } = await supabase.auth.signUp({
@@ -114,7 +114,7 @@ export function AuthProvider({ children }) {
         }
         return { success: true };
       }
-      
+
       // If no session but user exists, email confirmation is required
       // However, if auto-confirm is enabled in Supabase, this shouldn't happen
       if (data.user) {
@@ -122,7 +122,7 @@ export function AuthProvider({ children }) {
         // For auto-confirm setups, this is usually not needed
         return { success: true, requiresConfirmation: true, user: data.user };
       }
-      
+
       return { success: false, error: 'Signup failed - no user created' };
     } catch (error) {
       return { success: false, error: error.message };
@@ -138,7 +138,7 @@ export function AuthProvider({ children }) {
         // Remove cookie
         document.cookie = 'auth_token=; path=/; max-age=0';
       }
-      router.push('/login');
+      router.refresh();
     } catch (error) {
       console.error('Error signing out:', error);
     }
