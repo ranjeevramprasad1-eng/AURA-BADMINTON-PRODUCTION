@@ -1,10 +1,11 @@
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth as useAuthContext } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 
 export function useAuth() {
   const authContext = useAuthContext();
   const router = useRouter();
+  const queryClient = useQueryClient();
 
   const loginMutation = useMutation({
     mutationFn: async ({ email, password }) => {
@@ -15,7 +16,8 @@ export function useAuth() {
       return result;
     },
     onSuccess: () => {
-      router.push('/');
+      queryClient.resetQueries()
+      router.replace('/');
     },
   });
 
@@ -46,7 +48,6 @@ export function useAuth() {
   return {
     ...authContext,
     login: loginMutation.mutate,
-    loginAsync: loginMutation.mutateAsync,
     isLoggingIn: loginMutation.isPending,
     loginError: loginMutation.error,
     signup: signupMutation.mutate,
