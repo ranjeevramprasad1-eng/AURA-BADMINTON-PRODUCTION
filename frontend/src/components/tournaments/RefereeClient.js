@@ -1137,7 +1137,7 @@ export default function RefereeClient() {
                             )}
                           >
                             <span className="text-[10px] font-bold uppercase tracking-wider text-current/80">Bottom left</span>
-                            <span className="text-xs font-bold uppercase tracking-wider ">
+                            <span className="text-xs font-bold uppercase tracking-wider max-w-full overflow-hidden text-ellipsis whitespace-nowrap">
                               {getPlayerById(positions.pos2)?.name || getPlayerById(positions.pos2)?.username || "—"}
                             </span>
                           </Button>
