@@ -300,47 +300,7 @@ export function TeamInviteDrawer({ open, onOpenChange, tournamentId, teamId }) {
               </div>
             )}
 
-            {/* Pending invites you sent */}
-            {sentInvites.length > 0 && (
-              <div>
-                <Label>Pending invites you sent</Label>
-                <div className="mt-2 space-y-2 max-h-32 overflow-y-auto bg-muted/30 rounded-xl border border-border/50 p-2">
-                  {sentInvites.map((invite) => {
-                    const invitee = invite.invitee || {};
-                    return (
-                      <Card key={invite.id} className="p-3">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            {invitee.photo_url ? (
-                              <img
-                                src={invitee.photo_url}
-                                alt={invitee.username}
-                                className="size-8 rounded-full object-cover"
-                              />
-                            ) : (
-                              <div className="size-8 rounded-full bg-muted flex items-center justify-center">
-                                <span className="text-xs font-bold text-muted-foreground">
-                                  {invite.token ? "?" : (invitee.username || "I")[0].toUpperCase()}
-                                </span>
-                              </div>
-                            )}
-                            <div>
-                              <p className="text-sm font-medium">
-                                {invite.token ? "Pending (via link)" : invitee.username || "Unknown"}
-                              </p>
-                              <p className="text-xs text-muted-foreground">
-                                {new Date(invite.created_at).toLocaleDateString()}
-                              </p>
-                            </div>
-                          </div>
-                          <Badge variant="secondary">Pending</Badge>
-                        </div>
-                      </Card>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
+
           </TabsContent>
 
           <TabsContent value="link" className="mt-0 flex-1 overflow-y-auto space-y-4 min-h-0">
