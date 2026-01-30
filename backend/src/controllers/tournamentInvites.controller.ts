@@ -12,6 +12,30 @@ import type {
 } from "@/utils/validation";
 import { randomUUID } from "crypto";
 
+/**
+ * After an invite is accepted, delete all other pending invites for this tournament
+ * where either player (inviter or invitee) is involved. Keeps the accepted invite (already status "accepted").
+ */
+async function deleteRedundantPendingInvites(
+  tournamentId: number,
+  player1Id: number,
+  player2Id: number
+): Promise<void> {
+  const { data: toDelete } = await supabase
+    .from("tournament_invites")
+    .select("id")
+    .eq("tournament_id", tournamentId)
+    .eq("status", "pending")
+    .or(`inviter_id.in.(${player1Id},${player2Id}),invitee_id.in.(${player1Id},${player2Id})`);
+
+  if (toDelete?.length) {
+    await supabase
+      .from("tournament_invites")
+      .delete()
+      .in("id", toDelete.map((r) => r.id));
+  }
+}
+
 // POST /tournaments/:id/invite - Invite friend to tournament team
 export async function inviteToTournament(c: Context<AuthContext>) {
   try {
@@ -392,6 +416,13 @@ export async function acceptInviteByToken(c: Context<AuthContext>) {
       throw new HTTPException(400, { message: `Invite is ${invite.status}` });
     }
 
+    // Inviter cannot accept their own invite (only the person who received the link should accept)
+    if (invite.inviter_id === playerId) {
+      throw new HTTPException(403, {
+        message: "You cannot accept an invite you sent. Share the link with your partner to join.",
+      });
+    }
+
     // Update invite - clear token when setting invitee_id due to DB constraint
     const { data: updatedInvite, error: updateError } = await supabase
       .from("tournament_invites")
@@ -482,6 +513,13 @@ export async function acceptInviteByToken(c: Context<AuthContext>) {
       }
     }
 
+    // Delete other pending invites for this tournament involving either player
+    await deleteRedundantPendingInvites(
+      Number(invite.tournament_id),
+      Number(invite.inviter_id),
+      Number(playerId)
+    );
+
     return c.json({ data: updatedInvite });
   } catch (error) {
     if (error instanceof HTTPException) {
@@ -514,10 +552,6 @@ export async function updateTournamentInvite(c: Context<AuthContext>) {
       throw new HTTPException(404, { message: "Invite not found" });
     }
 
-    // Verify user is the invitee
-    if (invite.invitee_id !== playerId) {
-      throw new HTTPException(403, { message: "Not authorized to update this invite" });
-    }
 
     if (invite.status !== "pending") {
       throw new HTTPException(400, { message: "Invite is not pending" });
@@ -567,6 +601,15 @@ export async function updateTournamentInvite(c: Context<AuthContext>) {
           throw new HTTPException(500, { message: teamMemberError.message });
         }
       }
+    }
+
+    // Delete other pending invites for this tournament involving either player
+    if (body.status === "accepted" && invite.invitee_id != null) {
+      await deleteRedundantPendingInvites(
+        Number(invite.tournament_id),
+        Number(invite.inviter_id),
+        Number(invite.invitee_id)
+      );
     }
 
     return c.json({ data: updatedInvite });

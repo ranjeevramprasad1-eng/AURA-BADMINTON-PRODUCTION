@@ -144,7 +144,7 @@ export default function NotificationsPage() {
               <ArrowLeft className="size-5" />
             </Button>
             <h1 className="text-lg font-bold text-center">Notifications</h1>
-            <div className="flex items-center gap-2">
+            <div className="flex gap-2 items-center justify-end">
               {unreadCount > 0 && (
                 <Button
                   variant="ghost"

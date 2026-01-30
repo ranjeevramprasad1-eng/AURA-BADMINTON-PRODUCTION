@@ -265,7 +265,7 @@ export const tournamentInviteTokenSchema = z.object({
 
 export const createTournamentInviteSchema = z.object({
   invitee_id: z.number().int().positive().optional(),
-  team_id: z.number().int().positive().optional(),
+  team_id: z.number().int().positive().nullish(), // optional; backend creates team when missing
 });
 
 export const updateTournamentInviteSchema = z.object({

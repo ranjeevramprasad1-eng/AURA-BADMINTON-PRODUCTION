@@ -14,11 +14,11 @@ export function useTournamentInvites(tournamentId) {
   });
 
   const inviteMutation = useMutation({
-    mutationFn: ({ tournamentId, inviteeId, teamId }) =>
-      tournamentsApi.invite(tournamentId, {
-        invitee_id: inviteeId,
-        team_id: teamId,
-      }),
+    mutationFn: ({ tournamentId, inviteeId, teamId }) => {
+      const payload = { invitee_id: inviteeId };
+      if (teamId != null) payload.team_id = teamId;
+      return tournamentsApi.invite(tournamentId, payload);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tournament-invites", tournamentId] });
       queryClient.invalidateQueries({ queryKey: ["notifications"] });
@@ -27,18 +27,19 @@ export function useTournamentInvites(tournamentId) {
 
   const generateLinkMutation = useMutation({
     mutationFn: ({ tournamentId, teamId }) =>
-      tournamentsApi.generateInviteLink(tournamentId, teamId ? { team_id: teamId } : {}),
+      tournamentsApi.generateInviteLink(tournamentId, teamId != null ? { team_id: teamId } : {}),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tournament-invites", tournamentId] });
     },
   });
 
   const acceptInviteMutation = useMutation({
-    mutationFn: (inviteId, status) =>
+    mutationFn: ({ inviteId, status }) =>
       tournamentsApi.updateInvite(inviteId, { status }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tournament-invites", tournamentId] });
       queryClient.invalidateQueries({ queryKey: ["tournament", tournamentId] });
+      queryClient.invalidateQueries({ queryKey: ["tournament-teams", tournamentId] });
       queryClient.invalidateQueries({ queryKey: ["notifications"] });
     },
   });
@@ -49,6 +50,7 @@ export function useTournamentInvites(tournamentId) {
     invite: inviteMutation.mutate,
     generateLink: generateLinkMutation.mutate,
     acceptInvite: acceptInviteMutation.mutate,
+    acceptInviteAsync: acceptInviteMutation.mutateAsync,
     isInviting: inviteMutation.isPending,
     isGeneratingLink: generateLinkMutation.isPending,
     isAcceptingInvite: acceptInviteMutation.isPending,

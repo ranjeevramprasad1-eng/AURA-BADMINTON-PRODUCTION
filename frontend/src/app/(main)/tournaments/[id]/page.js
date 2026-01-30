@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useTournament } from "@/hooks/useTournament";
 import { useUser } from "@/hooks/useUser";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
@@ -31,20 +31,100 @@ import {
   ScrollablePageContent,
 } from "@/components/layout/ScrollablePage";
 import { toast } from "sonner";
-import { TeamInviteDialog } from "@/components/tournaments/TeamInviteDialog";
+import { TeamInviteDrawer } from "@/components/tournaments/TeamInviteDrawer";
+import { InviteAcceptDrawer } from "@/components/tournaments/InviteAcceptDrawer";
 import { useTournamentInvites } from "@/hooks/useTournamentInvites";
 import { UserPlus } from "lucide-react";
+import { RacquetIcon as Racquet, TicketIcon as Ticket } from "@phosphor-icons/react";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function TournamentDetailsPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const { data: tournament, isLoading } = useTournament(params.id);
   const { data: userData } = useUser();
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false);
-  const { invites } = useTournamentInvites(params.id);
+  const [isInviteDrawerOpen, setIsInviteDrawerOpen] = useState(false);
+  const [isInviteDrawerActionPending, setIsInviteDrawerActionPending] = useState(false);
+  const { invites, acceptInviteAsync } = useTournamentInvites(params.id);
+
+  const inviteToken = searchParams.get("invite");
+
+  // Fetch invite by token when ?invite= is present (e.g. from QR scan)
+  const { data: inviteByTokenData, isLoading: isLoadingInviteByToken, isError: isInviteByTokenError } = useQuery({
+    queryKey: ["tournament-invite-by-token", inviteToken],
+    queryFn: async () => {
+      const response = await tournamentsApi.getInviteByToken(inviteToken);
+      return response.data.data;
+    },
+    enabled: !!inviteToken && !!params.id,
+  });
+
+  // If not logged in and we have invite param, redirect to token page for signup/login
+  useEffect(() => {
+    if (!inviteToken || isLoadingInviteByToken) return;
+
+    if (isInviteByTokenError || (inviteToken && !inviteByTokenData && !isLoadingInviteByToken)) {
+      toast.error("Invalid or expired invite link.");
+      const url = new URL(window.location.href);
+      url.searchParams.delete("invite");
+      router.replace(url.pathname + url.search);
+      return;
+    }
+    if (inviteByTokenData) {
+      const matchesTournament = Number(inviteByTokenData.tournament_id) === Number(params.id);
+      const isPending = inviteByTokenData.status === "pending";
+      if (matchesTournament && isPending) {
+        setIsInviteDrawerOpen(true);
+      } else if (inviteToken) {
+        const url = new URL(window.location.href);
+        url.searchParams.delete("invite");
+        router.replace(url.pathname + url.search);
+      }
+    }
+  }, [inviteToken, inviteByTokenData, isLoadingInviteByToken, isInviteByTokenError, params.id, userData?.id, router]);
+
+  const closeInviteDrawerAndClearParam = () => {
+    setIsInviteDrawerOpen(false);
+    if (inviteToken) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("invite");
+      router.replace(url.pathname + url.search);
+    }
+  };
+
+  const handleAcceptInviteFromDrawer = async () => {
+    setIsInviteDrawerActionPending(true);
+    try {
+      await tournamentsApi.acceptInviteByToken(inviteToken);
+      toast.success("Invite accepted! You're now on the team.");
+      queryClient.invalidateQueries({ queryKey: ["tournament-invites", params.id] });
+      queryClient.invalidateQueries({ queryKey: ["tournament", params.id] });
+      queryClient.invalidateQueries({ queryKey: ["tournament-teams", params.id] });
+      closeInviteDrawerAndClearParam();
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to accept invite");
+    } finally {
+      setIsInviteDrawerActionPending(false);
+    }
+  };
+
+  const handleRejectInviteFromDrawer = async () => {
+    if (!inviteByTokenData?.id) return;
+    setIsInviteDrawerActionPending(true);
+    try {
+      await acceptInviteAsync({ inviteId: inviteByTokenData.id, status: "rejected" });
+      toast.success("Invite declined.");
+      closeInviteDrawerAndClearParam();
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to decline invite");
+    } finally {
+      setIsInviteDrawerActionPending(false);
+    }
+  };
 
   // Fetch teams for the tournament
   const { data: teamsData } = useQuery({
@@ -71,6 +151,12 @@ export default function TournamentDetailsPage() {
   // Check if tournament is doubles
   const isDoubles =
     tournament?.match_format?.type?.toLowerCase().includes("doubles") || false;
+
+  // Only show teams where both players are accepted (have player1_id and player2_id)
+  const completeTeams =
+    teamsData?.teams?.filter(
+      (t) => t.player1_id && t.player2_id
+    ) ?? [];
 
   // Get accepted invites to determine team
   const acceptedInvites = invites?.filter((invite) => invite.status === "accepted") || [];
@@ -177,6 +263,7 @@ export default function TournamentDetailsPage() {
     referee,
     capacity,
     match_format,
+    game,
     registration_fee,
     registered_count,
     registered_players,
@@ -247,12 +334,12 @@ export default function TournamentDetailsPage() {
             <h1 className="text-3xl font-black italic tracking-tighter text-foreground mb-2 leading-none">
               {name}
             </h1>
-            <div className="flex items-center gap-4 text-sm font-medium text-muted-foreground">
+            <div className="flex items-center gap-2.5 text-sm font-medium text-muted-foreground">
               <div className="flex items-center gap-1.5">
                 <MapPin className="size-4" />
                 <span>{venue?.name || "TBD"}</span>
               </div>
-              <div className="w-1 h-1 rounded-full bg-muted-foreground/50" />
+              <div className="size-1 rounded-full bg-muted-foreground/50" />
               <div className="flex items-center gap-1.5">
                 <Calendar className="size-4" />
                 <span>{formatDateWithDay(start_date)}</span>
@@ -263,7 +350,7 @@ export default function TournamentDetailsPage() {
 
         <div className="px-4 space-y-6 pt-2">
           {/* Quick Stats Row */}
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             <div className="bg-muted/30 rounded-xl p-3 border border-border/50 flex flex-col items-center justify-center text-center">
               <Clock className="size-5 text-primary mb-1" />
               <span className="text-[10px] uppercase font-bold text-muted-foreground">Time</span>
@@ -275,9 +362,15 @@ export default function TournamentDetailsPage() {
               <span className="text-xs font-bold">{registeredCount}/{capacity}</span>
             </div>
             <div className="bg-muted/30 rounded-xl p-3 border border-border/50 flex flex-col items-center justify-center text-center">
-              <Star className="size-5 text-primary mb-1" />
+              <Ticket className="size-5 text-primary mb-1" />
               <span className="text-[10px] uppercase font-bold text-muted-foreground">Entry</span>
               <span className="text-xs font-bold">{registration_fee > 0 ? `₹${registration_fee}` : "Free"}</span>
+            </div>
+
+            <div className="bg-muted/30 rounded-xl p-3 border border-border/50 flex flex-col items-center justify-center text-center">
+              <Racquet className="size-5 text-primary mb-1" />
+              <span className="text-[10px] uppercase font-bold text-muted-foreground">Game</span>
+              <span className="text-xs font-bold">{game?.name || "TBD"}</span>
             </div>
           </div>
 
@@ -332,7 +425,7 @@ export default function TournamentDetailsPage() {
           <div className="space-y-3 pb-8">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-black uppercase tracking-wider text-muted-foreground">
-                {teamsData?.teams && teamsData.teams.length > 0 ? `Teams (${teamsData.teams.length})` : `Roster (${registeredCount})`}
+                {completeTeams.length > 0 ? `Teams (${completeTeams.length})` : `Roster (${registeredCount})`}
               </h3>
               {progress > 0 && (
                 <div className="text-xs font-bold text-primary">{Math.round(progress)}% Full</div>
@@ -340,17 +433,18 @@ export default function TournamentDetailsPage() {
             </div>
 
             <div className="grid gap-3">
-              {teamsData?.teams && teamsData.teams.length > 0 ? (
-                // Show teams with members
-                teamsData.teams.map((team) => {
-                  // Find player objects for this team
-                  const player1 = registered_players?.find(p => p.id === team.player1_id);
-                  const player2 = registered_players?.find(p => p.id === team.player2_id);
+              {completeTeams.length > 0 ? (
+                // Show teams only when both players are accepted
+                completeTeams.map((team) => {
+                  // Find player objects from registered_players (use == for id type mismatch)
+                  const player1 = registered_players?.find(p => Number(p.id) === Number(team.player1_id));
+                  const player2 = registered_players?.find(p => Number(p.id) === Number(team.player2_id));
 
-                  // Build team members array
-                  const teamMembers = [];
-                  if (player1) teamMembers.push(player1);
-                  if (player2) teamMembers.push(player2);
+                  // Build team members: use full player when in registered_players, else fallback from team names (engine/teams returns player1_name, player2_name)
+                  const teamMembers = [
+                    player1 || (team.player1_id ? { id: team.player1_id, name: team.player1_name, username: team.player1_name, photo_url: null, aura: null } : null),
+                    player2 || (team.player2_id ? { id: team.player2_id, name: team.player2_name, username: team.player2_name, photo_url: null, aura: null } : null),
+                  ].filter(Boolean);
 
                   return (
                     <div
@@ -363,13 +457,13 @@ export default function TournamentDetailsPage() {
                         </span>
                         {team.avg_rating > 0 && (
                           <span className="text-[10px] text-muted-foreground font-medium flex items-center gap-1">
-                            <Zap className="size-3 fill-primary text-primary" />
+                            AURA{" "}
                             {(team.avg_rating || 0).toFixed(1)} Avg
                           </span>
                         )}
                       </div>
                       <div className="space-y-2">
-                        {teamMembers.length > 0 ? (
+                        {teamMembers.length > 0 && (
                           teamMembers.map((player) => (
                             <div
                               key={player.id}
@@ -398,10 +492,6 @@ export default function TournamentDetailsPage() {
                               </div>
                             </div>
                           ))
-                        ) : (
-                          <div className="text-xs text-muted-foreground/70 italic p-2">
-                            Team members pending...
-                          </div>
                         )}
                       </div>
                     </div>
@@ -607,9 +697,19 @@ export default function TournamentDetailsPage() {
         </DrawerContent>
       </Drawer>
 
+      {/* Invite from QR / link – new drawer showing invite details and accept/reject */}
+      <InviteAcceptDrawer
+        open={isInviteDrawerOpen}
+        onOpenChange={(open) => !open && closeInviteDrawerAndClearParam()}
+        inviteData={inviteByTokenData}
+        onAccept={handleAcceptInviteFromDrawer}
+        onReject={handleRejectInviteFromDrawer}
+        isAccepting={isInviteDrawerActionPending}
+      />
+
       {/* Team Invite Dialog */}
       {isDoubles && (
-        <TeamInviteDialog
+        <TeamInviteDrawer
           open={isInviteDialogOpen}
           onOpenChange={setIsInviteDialogOpen}
           tournamentId={parseInt(params.id)}

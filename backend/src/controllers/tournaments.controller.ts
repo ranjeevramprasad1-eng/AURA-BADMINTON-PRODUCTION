@@ -257,6 +257,11 @@ export async function getTournamentById(c: Context<AuthContext>) {
       end_time,
       capacity,
       registration_fee,
+      game_id,
+      games:games (
+        id,
+        name
+      ),
       venue:venue (
         id,
         name,
@@ -413,6 +418,9 @@ export async function getTournamentById(c: Context<AuthContext>) {
       ? tournament.venue[0]
       : tournament.venue;
 
+    // Get game data
+    const game = Array.isArray(tournament.games) ? tournament.games[0] : tournament.games;
+
     return c.json({
       data: {
         id: tournament.id,
@@ -431,6 +439,7 @@ export async function getTournamentById(c: Context<AuthContext>) {
         start_date: tournament.start_time,
         end_date: tournament.end_time,
         capacity: tournament.capacity,
+        game: game ? { id: game.id, name: game.name } : null,
         match_format: {
           type: matchFormat?.type || null,
           max_age: matchFormat?.max_age || null,

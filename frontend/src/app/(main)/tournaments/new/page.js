@@ -55,13 +55,13 @@ import {
 
 // Tournament format options
 const TOURNAMENT_FORMATS = [
-  { 
-    value: 'swiss', 
+  {
+    value: 'swiss',
     label: 'Swiss System',
     description: 'Players are paired based on points and ratings. Dynamic team formation each round.'
   },
-  { 
-    value: 'group_knockout', 
+  {
+    value: 'group_knockout',
     label: 'Group Stage + Knockout',
     description: 'Teams play in groups (round-robin), then top teams advance to knockout stage.'
   },
@@ -183,7 +183,7 @@ export default function CreateTournamentPage() {
     const minutes = String(date.getMinutes()).padStart(2, '0');
     return `${year}-${month}-${day}T${hours}:${minutes}`;
   };
-  
+
   const now = new Date();
   const startTime = new Date(now.getTime() + 60 * 60 * 1000); // 1 hour ahead
   const endTime = new Date(now.getTime() + 2 * 60 * 60 * 1000); // 2 hours ahead
@@ -306,12 +306,12 @@ export default function CreateTournamentPage() {
           match_format: {
             min_age:
               parsed.match_format.min_age !== undefined &&
-              parsed.match_format.min_age !== null
+                parsed.match_format.min_age !== null
                 ? Number(parsed.match_format.min_age)
                 : undefined,
             max_age:
               parsed.match_format.max_age !== undefined &&
-              parsed.match_format.max_age !== null
+                parsed.match_format.max_age !== null
                 ? Number(parsed.match_format.max_age)
                 : undefined,
             eligible_gender: parsed.match_format.eligible_gender,
@@ -518,11 +518,10 @@ export default function CreateTournamentPage() {
                               {TOURNAMENT_FORMATS.map((format) => (
                                 <label
                                   key={format.value}
-                                  className={`relative flex cursor-pointer rounded-xl border-2 p-4 transition-all ${
-                                    field.state.value === format.value
-                                      ? 'border-primary bg-primary/5 shadow-sm'
-                                      : 'border-border/50 hover:bg-muted/30 hover:border-border'
-                                  }`}
+                                  className={`relative flex cursor-pointer rounded-xl border-2 p-4 transition-all ${field.state.value === format.value
+                                    ? 'border-primary bg-primary/5 shadow-sm'
+                                    : 'border-border/50 hover:bg-muted/30 hover:border-border'
+                                    }`}
                                 >
                                   <input
                                     type="radio"
@@ -534,11 +533,10 @@ export default function CreateTournamentPage() {
                                   />
                                   <div className="flex-1">
                                     <div className="flex items-center gap-3">
-                                      <div className={`size-5 rounded-full border-2 flex items-center justify-center transition-colors ${
-                                        field.state.value === format.value
-                                          ? 'border-primary bg-primary'
-                                          : 'border-muted-foreground/30'
-                                      }`}>
+                                      <div className={`size-5 rounded-full border-2 flex items-center justify-center transition-colors ${field.state.value === format.value
+                                        ? 'border-primary bg-primary'
+                                        : 'border-muted-foreground/30'
+                                        }`}>
                                         {field.state.value === format.value && (
                                           <div className="size-2 rounded-full bg-white" />
                                         )}
@@ -555,7 +553,7 @@ export default function CreateTournamentPage() {
                               ))}
                             </div>
                             <FieldDescription className="mt-3 text-xs bg-muted/30 p-3 rounded-lg">
-                              {field.state.value === 'swiss' 
+                              {field.state.value === 'swiss'
                                 ? '💡 Swiss system pairs players dynamically each round. Best for individual skill-based tournaments.'
                                 : '💡 Group + Knockout requires pre-formed teams. Teams compete in groups, then advance to knockout rounds.'
                               }
@@ -663,247 +661,6 @@ export default function CreateTournamentPage() {
                       }}
                     />
 
-                    {/* Age Range */}
-                    <div className="grid grid-cols-2 gap-4">
-                      <form.Field
-                        name="match_format.min_age"
-                        children={(field) => {
-                          const isInvalid =
-                            field.state.meta.isTouched &&
-                            !field.state.meta.isValid;
-                          return (
-                            <Field data-invalid={isInvalid}>
-                              <FieldLabel htmlFor={field.name} className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                                Min Age
-                              </FieldLabel>
-                              <Input
-                                id={field.name}
-                                name={field.name}
-                                type="number"
-                                min="1"
-                                value={field.state.value}
-                                onBlur={field.handleBlur}
-                                onChange={(e) =>
-                                  field.handleChange(e.target.value)
-                                }
-                                aria-invalid={isInvalid}
-                                placeholder="Optional"
-                                className="h-11 rounded-xl bg-muted/40 border-transparent focus:bg-background focus:border-input"
-                              />
-                              {isInvalid && (
-                                <FieldError errors={field.state.meta.errors} />
-                              )}
-                            </Field>
-                          );
-                        }}
-                      />
-                      <form.Field
-                        name="match_format.max_age"
-                        children={(field) => {
-                          const isInvalid =
-                            field.state.meta.isTouched &&
-                            !field.state.meta.isValid;
-                          return (
-                            <Field data-invalid={isInvalid}>
-                              <FieldLabel htmlFor={field.name} className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                                Max Age
-                              </FieldLabel>
-                              <Input
-                                id={field.name}
-                                name={field.name}
-                                type="number"
-                                min="1"
-                                value={field.state.value}
-                                onBlur={field.handleBlur}
-                                onChange={(e) =>
-                                  field.handleChange(e.target.value)
-                                }
-                                aria-invalid={isInvalid}
-                                placeholder="Optional"
-                                className="h-11 rounded-xl bg-muted/40 border-transparent focus:bg-background focus:border-input"
-                              />
-                              {isInvalid && (
-                                <FieldError errors={field.state.meta.errors} />
-                              )}
-                            </Field>
-                          );
-                        }}
-                      />
-                    </div>
-
-                    {/* Round Formation Rules */}
-                    <div className="space-y-4 pt-4 mt-4 border-t border-border/20">
-                      <div className="flex items-center gap-2 mb-2">
-                        <div className="size-6 rounded-md bg-muted flex items-center justify-center">
-                          <Settings className="size-3 text-muted-foreground" />
-                        </div>
-                        <h4 className="font-bold text-xs uppercase tracking-wider text-muted-foreground">
-                          Round Formation Rules
-                        </h4>
-                      </div>
-
-                      {/* Final */}
-                      <form.Field
-                        name="match_format.metadata.set_rules.final.best_of"
-                        children={(field) => {
-                          const isInvalid =
-                            field.state.meta.isTouched &&
-                            !field.state.meta.isValid;
-                          return (
-                            <Field data-invalid={isInvalid}>
-                              <FieldLabel htmlFor={field.name} className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                                Final - Best Of
-                              </FieldLabel>
-                              <Input
-                                id={field.name}
-                                name={field.name}
-                                type="number"
-                                min="1"
-                                value={field.state.value}
-                                onBlur={field.handleBlur}
-                                onChange={(e) =>
-                                  field.handleChange(e.target.value)
-                                }
-                                aria-invalid={isInvalid}
-                                placeholder="7"
-                                className="h-11 rounded-xl bg-muted/40 border-transparent focus:bg-background focus:border-input"
-                              />
-                              <FieldDescription className="text-xs">
-                                Number of sets in the final match (e.g., 7 means
-                                first to win 4 sets wins)
-                              </FieldDescription>
-                              {isInvalid && (
-                                <FieldError errors={field.state.meta.errors} />
-                              )}
-                            </Field>
-                          );
-                        }}
-                      />
-
-                      {/* Semi Final */}
-                      <form.Field
-                        name="match_format.metadata.set_rules.semi_final.best_of"
-                        children={(field) => {
-                          const isInvalid =
-                            field.state.meta.isTouched &&
-                            !field.state.meta.isValid;
-                          return (
-                            <Field data-invalid={isInvalid}>
-                              <FieldLabel htmlFor={field.name} className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                                Semi Final - Best Of
-                              </FieldLabel>
-                              <Input
-                                id={field.name}
-                                name={field.name}
-                                type="number"
-                                min="1"
-                                value={field.state.value}
-                                onBlur={field.handleBlur}
-                                onChange={(e) =>
-                                  field.handleChange(e.target.value)
-                                }
-                                aria-invalid={isInvalid}
-                                placeholder="5"
-                                className="h-11 rounded-xl bg-muted/40 border-transparent focus:bg-background focus:border-input"
-                              />
-                              <FieldDescription className="text-xs">
-                                Number of sets in semi final matches (e.g., 5
-                                means first to win 3 sets wins)
-                              </FieldDescription>
-                              {isInvalid && (
-                                <FieldError errors={field.state.meta.errors} />
-                              )}
-                            </Field>
-                          );
-                        }}
-                      />
-
-                      {/* League */}
-                      <div className="space-y-3 p-4 bg-muted/20 rounded-xl border border-border/30">
-                        <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                          League Settings
-                        </label>
-                        <div className="grid grid-cols-2 gap-4">
-                          <form.Field
-                            name="match_format.metadata.set_rules.league._rounds"
-                            children={(field) => {
-                              const isInvalid =
-                                field.state.meta.isTouched &&
-                                !field.state.meta.isValid;
-                              return (
-                                <Field data-invalid={isInvalid}>
-                                  <FieldLabel htmlFor={field.name} className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                                    Number of Rounds
-                                  </FieldLabel>
-                                  <Input
-                                    id={field.name}
-                                    name={field.name}
-                                    type="number"
-                                    min="1"
-                                    value={field.state.value}
-                                    onBlur={field.handleBlur}
-                                    onChange={(e) =>
-                                      field.handleChange(e.target.value)
-                                    }
-                                    aria-invalid={isInvalid}
-                                    placeholder="4"
-                                    className="h-11 rounded-xl bg-background border-border/50 focus:border-input"
-                                  />
-                                  {isInvalid && (
-                                    <FieldError
-                                      errors={field.state.meta.errors}
-                                    />
-                                  )}
-                                </Field>
-                              );
-                            }}
-                          />
-                          <form.Field
-                            name="match_format.metadata.set_rules.league.best_of"
-                            children={(field) => {
-                              const isInvalid =
-                                field.state.meta.isTouched &&
-                                !field.state.meta.isValid;
-                              return (
-                                <Field data-invalid={isInvalid}>
-                                  <FieldLabel htmlFor={field.name} className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                                    Best Of
-                                  </FieldLabel>
-                                  <Input
-                                    id={field.name}
-                                    name={field.name}
-                                    type="number"
-                                    min="1"
-                                    value={field.state.value}
-                                    onBlur={field.handleBlur}
-                                    onChange={(e) =>
-                                      field.handleChange(e.target.value)
-                                    }
-                                    aria-invalid={isInvalid}
-                                    placeholder="3"
-                                    className="h-11 rounded-xl bg-background border-border/50 focus:border-input"
-                                  />
-                                  {isInvalid && (
-                                    <FieldError
-                                      errors={field.state.meta.errors}
-                                    />
-                                  )}
-                                </Field>
-                              );
-                            }}
-                          />
-                        </div>
-                        <FieldDescription className="text-xs">
-                          League will have{" "}
-                          <span className="font-bold">{form.state.values.match_format.metadata.set_rules
-                            .league._rounds || 4}</span>{" "}
-                          rounds, where each match is best of{" "}
-                          <span className="font-bold">{form.state.values.match_format.metadata.set_rules
-                            .league.best_of || 3}</span>{" "}
-                          sets
-                        </FieldDescription>
-                      </div>
-                    </div>
                   </div>
 
                   {/* Schedule Section */}
@@ -1107,7 +864,7 @@ export default function CreateTournamentPage() {
                   onClick={() => form.reset()}
                   className="size-12"
                 >
-                  <RotateCcw className="size-4"/>
+                  <RotateCcw className="size-4" />
                 </Button>
                 <Button
                   type="submit"
@@ -1131,7 +888,7 @@ export default function CreateTournamentPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Confirm Tournament Creation</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to create the tournament "{pendingSubmitData?.name}"? 
+              Are you sure you want to create the tournament "{pendingSubmitData?.name}"?
               This action cannot be undone. Please review all details before confirming.
             </AlertDialogDescription>
           </AlertDialogHeader>

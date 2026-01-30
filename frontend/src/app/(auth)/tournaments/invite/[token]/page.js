@@ -1,34 +1,32 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { tournamentsApi } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
-import { uploadAvatar } from "@/lib/storage";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { MapPin, Calendar, Clock, Users, Star, ArrowLeft } from "lucide-react";
+import { MapPin, Calendar, Clock, Users, Star, ArrowLeft, Share2 } from "lucide-react";
 import { formatTime, formatDateWithDay } from "@/lib/utils";
+import { useUser } from "@/hooks/useUser";
 
 export default function TournamentInviteSignupPage() {
   const params = useParams();
   const router = useRouter();
   const token = params.token;
-  const { user, isLoading: isAuthLoading, signup, signupAsync, isSigningUp, signupError } = useAuth();
+  const { user, isLoading: isAuthLoading, signupAsync, isSigningUp, signupError } = useAuth();
+  const { data: userData, isLoading: isLoadingUser } = useUser();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [username, setUsername] = useState("");
   const [gender, setGender] = useState("");
   const [dob, setDob] = useState("");
-  const [avatarFile, setAvatarFile] = useState(null);
-  const [avatarPreview, setAvatarPreview] = useState(null);
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [isUploading, setIsUploading] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
 
   // Fetch invite details (works for both authenticated and unauthenticated users)
@@ -40,6 +38,24 @@ export default function TournamentInviteSignupPage() {
     },
     enabled: !!token,
   });
+
+  // Derive redirect flag from data (safe when inviteData is still loading)
+  const isLoggedIn = !!user;
+  const inviter = inviteData?.inviter;
+  const isInviter = isLoggedIn && userData?.id === inviter?.id;
+  const isTeamComplete = (inviteData?.team?.members?.length || 0) >= 2;
+  const shouldRedirectToTournament =
+    isLoggedIn &&
+    !isInviter &&
+    inviteData?.status === "pending" &&
+    !isTeamComplete &&
+    !!inviteData?.tournament_id;
+
+  // Logged-in invitee: redirect to /tournaments/[id]?invite= (must run before any early return)
+  useEffect(() => {
+    if (!shouldRedirectToTournament) return;
+    router.replace(`/tournaments/${inviteData.tournament_id}?invite=${encodeURIComponent(token)}`);
+  }, [shouldRedirectToTournament, inviteData?.tournament_id, token, router]);
 
   // Handle join for existing/logged-in users
   const handleJoinTeam = async () => {
@@ -65,22 +81,6 @@ export default function TournamentInviteSignupPage() {
       return;
     }
 
-    let photoUrl = null;
-
-    // Upload avatar if provided
-    if (avatarFile) {
-      try {
-        setIsUploading(true);
-        const tempId = `temp-${Date.now()}-${Math.random().toString(36).substring(7)}`;
-        photoUrl = await uploadAvatar(avatarFile, tempId);
-      } catch (error) {
-        toast.error(error.message || "Failed to upload avatar");
-        setIsUploading(false);
-        return;
-      } finally {
-        setIsUploading(false);
-      }
-    }
 
     // Sign up the user
     try {
@@ -90,7 +90,6 @@ export default function TournamentInviteSignupPage() {
         username,
         gender,
         dob: dob || null,
-        photo_url: photoUrl,
       });
 
       // After successful signup, accept the invite
@@ -111,12 +110,12 @@ export default function TournamentInviteSignupPage() {
     }
   };
 
-  // Show loading state
-  if (isLoadingInvite || isAuthLoading) {
+  // Show loading state (when logged in, also wait for user details to know if viewer is inviter)
+  if (isLoadingInvite || isAuthLoading || (user && isLoadingUser)) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="flex flex-col items-center gap-3">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-purple-500 border-t-transparent" />
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-500 border-t-transparent" />
           <p className="text-gray-600">Loading invite details...</p>
         </div>
       </div>
@@ -139,13 +138,39 @@ export default function TournamentInviteSignupPage() {
   }
 
   const tournament = inviteData.tournament;
-  const inviter = inviteData.inviter;
   const team = inviteData.team;
-  const isLoggedIn = !!user;
-
-  // Check if team is already complete (2 members for doubles)
   const teamMemberCount = team?.members?.length || 0;
-  const isTeamComplete = teamMemberCount >= 2;
+
+  if (shouldRedirectToTournament) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-500 border-t-transparent" />
+          <p className="text-gray-600">Taking you to the tournament…</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Inviter opened their own link — they cannot accept; show message to share with partner
+  if (isInviter) {
+    return (
+      <div className="flex min-h-screen items-center justify-center p-4 bg-background">
+        <Card className="p-6 max-w-md w-full text-center border-border/50">
+          <div className="mb-4 flex justify-center">
+            <Share2 className="size-12 text-primary" />
+          </div>
+          <h2 className="text-xl font-bold mb-2">You sent this invite</h2>
+          <p className="text-muted-foreground mb-4">
+            Share this link with your partner so they can join the team. You cannot accept your own invite.
+          </p>
+          <Button onClick={() => router.push(`/tournaments/${inviteData.tournament_id}`)} className="w-full">
+            View Tournament
+          </Button>
+        </Card>
+      </div>
+    );
+  }
 
   // Check if invite is already accepted
   if (inviteData.status === "accepted") {
@@ -205,7 +230,7 @@ export default function TournamentInviteSignupPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background max-w-[500px] border-r border-l mx-auto">
       {/* Hero Section - matches /tournaments/[id] */}
       <div className="relative h-[40vh] w-full overflow-hidden">
         {tournament?.image_url ? (
@@ -215,15 +240,15 @@ export default function TournamentInviteSignupPage() {
             className="w-full h-full object-cover"
           />
         ) : (
-          <div className="w-full h-full bg-gradient-to-br from-primary to-teal-600 relative flex items-center justify-center">
-            <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-white to-transparent" />
+          <div className="w-full h-full bg-linear-to-br from-primary to-teal-600 relative flex items-center justify-center">
+            <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_center,var(--tw-gradient-stops))] from-white to-transparent" />
           </div>
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-transparent" />
+        <div className="absolute inset-0 bg-linear-to-t from-background via-background/60 to-transparent" />
 
         {/* Back button */}
         <header className="absolute top-0 left-0 right-0 z-20 pt-safe-top">
-          <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-b from-black/50 to-transparent">
+          <div className="flex items-center justify-between px-4 py-3 bg-linear-to-b from-black/50 to-transparent">
             <Button
               variant="ghost"
               size="icon"
@@ -437,7 +462,6 @@ export default function TournamentInviteSignupPage() {
                   type="submit"
                   disabled={
                     isSigningUp ||
-                    isUploading ||
                     (password && confirmPassword && password !== confirmPassword)
                   }
                   className="w-full h-14 rounded-xl shadow-xl shadow-primary/25 text-lg font-black uppercase tracking-wide"
