@@ -19,7 +19,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { Copy, Check, UserPlus, Link as LinkIcon, CheckCircle2, XCircle, QrCode, Users, Share2 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import QRCode from "qrcode";
 
@@ -134,10 +133,6 @@ export function TeamInviteDrawer({ open, onOpenChange, tournamentId, teamId }) {
     () => pendingInvites.filter((inv) => inv.invitee_id === currentUserId),
     [pendingInvites, currentUserId]
   );
-  const sentInvites = useMemo(
-    () => pendingInvites.filter((inv) => inv.inviter_id === currentUserId),
-    [pendingInvites, currentUserId]
-  );
 
   const handleAcceptInvite = async (inviteId) => {
     try {
@@ -227,14 +222,18 @@ export function TeamInviteDrawer({ open, onOpenChange, tournamentId, teamId }) {
                   </div>
                 )}
               </div>
-              <Button
-                className="w-full mt-3"
-                onClick={handleInviteFriend}
-                disabled={!selectedFriendId || isLoadingFriends}
-              >
-                <UserPlus className="size-4 mr-2" />
-                Send Invite
-              </Button>
+              {
+                friends.length > 0 && (
+                  <Button
+                    className="w-full mt-3"
+                    onClick={handleInviteFriend}
+                    disabled={!selectedFriendId || isLoadingFriends}
+                  >
+                    <UserPlus className="size-4 mr-2" />
+                    Send Invite
+                  </Button>
+                )
+              }
             </div>
 
             {/* Invites to you – accept or reject */}
