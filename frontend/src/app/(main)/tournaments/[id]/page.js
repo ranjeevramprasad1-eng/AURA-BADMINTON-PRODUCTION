@@ -6,7 +6,7 @@ import { useTournament } from "@/hooks/useTournament";
 import { useUser } from "@/hooks/useUser";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { tournamentsApi, tournamentEngineApi } from "@/lib/api";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Drawer,
   DrawerContent,
@@ -22,6 +22,7 @@ import {
   Calendar,
   Users,
   Zap,
+  Trophy,
 } from "lucide-react";
 import { formatTime, formatDateWithDay, getTournamentCategory } from "@/lib/utils";
 import {
@@ -36,6 +37,7 @@ import { useTournamentInvites } from "@/hooks/useTournamentInvites";
 import { UserPlus } from "lucide-react";
 import { RacquetIcon as Racquet, TicketIcon as Ticket } from "@phosphor-icons/react";
 import { Skeleton } from "@/components/ui/skeleton";
+import Link from "next/link";
 
 export default function TournamentDetailsPage() {
   const params = useParams();
@@ -249,7 +251,14 @@ export default function TournamentDetailsPage() {
   }
 
   if (!tournament) {
-    return <div className="p-4 text-center">Tournament not found</div>;
+    return <div className="flex flex-col items-center justify-center py-20 text-center space-y-4 px-4">
+      <div className="bg-muted/30 rounded-full">
+        <Trophy className="size-24" />
+      </div>
+      <h2 className="text-xl font-black uppercase tracking-tight">Tournament Not Found</h2>
+      <p className="text-muted-foreground text-sm">This tournament doesn't exist or has been removed.</p>
+      <Link href="/tournaments" className={buttonVariants({ variant: "ghost", size: "sm" })}>Go back to tournaments</Link>
+    </div>;
   }
 
   const {

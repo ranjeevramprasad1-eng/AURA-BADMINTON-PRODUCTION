@@ -6,7 +6,7 @@ import { useRefereeMatch } from "@/hooks/useRefereeMatch";
 import { matchesApi } from "@/lib/api";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   ArrowLeft,
@@ -42,6 +42,7 @@ import {
 } from "@/components/layout/ScrollablePage";
 import { createWebSocketConnection } from "@/lib/websocket";
 import { Card } from "../ui/card";
+import Link from "next/link";
 
 export default function RefereeClient() {
   const params = useParams();
@@ -638,10 +639,10 @@ export default function RefereeClient() {
                 <Button variant="outline" onClick={() => router.refresh()} size="icon">
                   <RefreshCcw />
                 </Button>
-                <Button variant="outline" onClick={() => router.back()} className="flex items-center gap-2">
+                <Link href="/" className={buttonVariants({ variant: "outline", size: "sm" })}>
                   <ArrowLeft className="size-4" />
                   Go Back
-                </Button>
+                </Link>
 
               </div>
             </Card>

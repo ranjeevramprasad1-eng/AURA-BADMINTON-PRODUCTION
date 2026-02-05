@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -25,6 +25,8 @@ import {
   Users,
   AlertTriangle,
   UserCheck,
+  ArrowRight,
+  Loader2,
 } from "lucide-react";
 import { useTournamentEngine } from "@/hooks/useTournamentEngine";
 
@@ -100,37 +102,20 @@ export function GroupManager({ tournamentId }) {
   if (!info?.groups) {
     return (
       <>
-        <Card className="m-6">
+        <Card className="gap-2">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Users className="size-5" />
               Initialize Groups
             </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-muted-foreground">
+            <CardDescription>
               Set up groups for the tournament. Teams will be distributed using
               snake draft based on ratings.
-            </p>
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
 
-            {/* Registration Stats */}
-            <div className="flex items-center gap-4 p-3 bg-muted/50 rounded-lg">
-              <div className="flex items-center gap-2">
-                <Users className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm">
-                  <strong>{teamCount}</strong> teams
-                </span>
-              </div>
-              <div className="h-4 w-px bg-border" />
-              <div className="flex items-center gap-2">
-                <UserCheck className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm">
-                  <strong>{playerCount}</strong> players
-                </span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4 my-2 mb-4">
               <span className="text-sm font-medium">Number of Groups:</span>
               <Select
                 value={String(selectedGroups)}
@@ -147,6 +132,40 @@ export function GroupManager({ tournamentId }) {
               </Select>
             </div>
 
+            {/* Registration Stats */}
+            <div className="flex items-center gap-2 justify-between">
+              <div className="flex items-center gap-4 justify-between px-4 py-2 bg-muted/50 rounded-full border border-border w-full">
+                <div className="flex items-center gap-2">
+                  <Users className="size-4 text-muted-foreground" />
+                  <span className="text-xs">
+                    <strong>{teamCount}</strong> teams
+                  </span>
+                </div>
+                <div className="size-4 w-px bg-border" />
+                <div className="flex items-center gap-2">
+                  <UserCheck className="size-4 text-muted-foreground" />
+                  <span className="text-xs">
+                    <strong>{playerCount}</strong> players
+                  </span>
+                </div>
+              </div>
+              <Button
+                onClick={handleInitialize}
+                disabled={isInitializing || teamCount < selectedGroups * 2}
+                className="rounded-full"
+                size="sm"
+              >
+                {isInitializing ?
+                  <span className="flex items-center gap-2">
+                    <Loader2 className="size-4 animate-spin" />
+                    Initializing...
+                  </span> :
+                  <span className="flex items-center gap-2">
+                    Start <ArrowRight className="size-4" />
+                  </span>}
+              </Button>
+            </div>
+
             {teamCount > 0 && teamCount < selectedGroups * 2 && (
               <p className="text-sm text-destructive">
                 Need at least {selectedGroups * 2} teams for {selectedGroups}{" "}
@@ -154,12 +173,7 @@ export function GroupManager({ tournamentId }) {
               </p>
             )}
 
-            <Button
-              onClick={handleInitialize}
-              disabled={isInitializing || teamCount < selectedGroups * 2}
-            >
-              {isInitializing ? "Initializing..." : "Initialize Groups"}
-            </Button>
+
           </CardContent>
         </Card>
       </>
@@ -174,12 +188,13 @@ export function GroupManager({ tournamentId }) {
     <div className="space-y-2">
       {/* Header with actions */}
       {canEditGroups && (
-        <div className="flex items-center px-4">
+        <div className="absolute top-6 right-0 flex items-center px-4">
           <Button
             variant="destructive"
             size="sm"
             onClick={() => reset()}
             disabled={isResetting}
+            className="rounded-full text-xs px-2 py-1"
           >
             {isResetting ? "Resetting..." : "Reset Groups"}
           </Button>

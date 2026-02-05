@@ -4,7 +4,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useMemo, useState, useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
-import { courtsApi, tournamentsApi } from "@/lib/api";
+import { courtsApi, tournamentsApi, matchesApi } from "@/lib/api";
 import { useActiveCourtMatch } from "@/hooks/useCourtMatches";
 import { useTournamentEngine } from "@/hooks/useTournamentEngine";
 import { useDisplayTimer } from "@/hooks/useDisplayTimer";
@@ -65,12 +65,6 @@ export default function ViewCourtPage() {
   const [winnerTeamId, setWinnerTeamId] = useState(null);
   /** When match ends, keep showing it (with winner) until next match or timeout */
   const [completedMatchSnapshot, setCompletedMatchSnapshot] = useState(null);
-  const [scoreAnimation, setScoreAnimation] = useState({
-    teamA: false,
-    teamB: false,
-  });
-  const prevScoreA = useRef(0);
-  const prevScoreB = useRef(0);
   const wsConnectionRef = useRef(null);
   const tournamentWsRef = useRef(null);
 
@@ -97,6 +91,10 @@ export default function ViewCourtPage() {
         ];
         if (triggers.includes(data.type)) {
           queryClient.invalidateQueries({ queryKey: ["matches", "court", tournamentId, courtId] });
+          // Refetch match state when match starts so we get court positions for score alignment
+          if (data.type === "match_start") {
+            queryClient.invalidateQueries({ predicate: (q) => q.queryKey[0] === "match-state" });
+          }
         }
       },
       reconnect: true,
@@ -122,6 +120,22 @@ export default function ViewCourtPage() {
       }
     },
     enabled: !!tournamentId && !!matchDetails?.round && !!activeMatch?.id,
+  });
+
+  // Fetch match state for court positions (left/right) so we can align teams and scores to court sides
+  const matchIdForState = matchDetails?.id ?? activeMatch?.id;
+  const { data: matchState } = useQuery({
+    queryKey: ["match-state", matchIdForState],
+    queryFn: async () => {
+      if (!matchIdForState) return null;
+      try {
+        const response = await matchesApi.getState(matchIdForState);
+        return response.data?.data ?? response.data;
+      } catch (error) {
+        return null;
+      }
+    },
+    enabled: !!matchIdForState,
   });
 
   // Change state only when next match starts (or on reload). Keep showing completed match + winner until then.
@@ -215,26 +229,6 @@ export default function ViewCourtPage() {
     }
   }, [matchDetails, activeMatch?.id, tournamentMatchData, queryClient, tournamentId, courtId]);
 
-  // Detect score changes and trigger animations
-  useEffect(() => {
-    if (scoreA !== prevScoreA.current && prevScoreA.current !== 0) {
-      setScoreAnimation((prev) => ({ ...prev, teamA: true }));
-      setTimeout(
-        () => setScoreAnimation((prev) => ({ ...prev, teamA: false })),
-        600
-      );
-    }
-    if (scoreB !== prevScoreB.current && prevScoreB.current !== 0) {
-      setScoreAnimation((prev) => ({ ...prev, teamB: true }));
-      setTimeout(
-        () => setScoreAnimation((prev) => ({ ...prev, teamB: false })),
-        600
-      );
-    }
-    prevScoreA.current = scoreA;
-    prevScoreB.current = scoreB;
-  }, [scoreA, scoreB]);
-
   // Fetch tournament engine data for standings
   const {
     standings: engineStandings,
@@ -270,7 +264,156 @@ export default function ViewCourtPage() {
     return groupKeys[currentGroupIndex];
   }, [currentGroupIndex, groupKeys]);
 
-  // Loading state
+  // Compute match data and teams before any early return so hooks (useMemos below) run in consistent order
+  const showingCompletedMatch = !activeMatch && !isLoading && completedMatchSnapshot != null;
+  const match = showingCompletedMatch ? completedMatchSnapshot?.match : (matchDetails || activeMatch);
+  const effectiveMatchDetails = showingCompletedMatch ? completedMatchSnapshot?.matchDetails : matchDetails;
+  const players = tournamentMatchData?.players || [];
+  const teams = effectiveMatchDetails?.teams ?? matchDetails?.teams ?? [];
+
+  // Group players into teams (from tournament API) or fallback to matchDetails teams
+  const teamA = useMemo(() => {
+    if (players && players.length > 0) {
+      return players.filter((p) => p.team === "A") || [];
+    }
+    return teams[0]?.members?.map((member) => ({
+      id: member.id,
+      name: member.username || `Player ${member.id}`,
+      username: member.username || `Player ${member.id}`,
+      photo_url: member.photo_url,
+      aura: null,
+      team: "A",
+    })) || [];
+  }, [players, teams]);
+
+  const teamB = useMemo(() => {
+    if (players && players.length > 0) {
+      return players.filter((p) => p.team === "B") || [];
+    }
+    return teams[1]?.members?.map((member) => ({
+      id: member.id,
+      name: member.username || `Player ${member.id}`,
+      username: member.username || `Player ${member.id}`,
+      photo_url: member.photo_url,
+      aura: null,
+      team: "B",
+    })) || [];
+  }, [players, teams]);
+
+  const teamAId = teams[0]?.id ?? null;
+  const teamBId = teams[1]?.id ?? null;
+
+  // Same as RefereeClient: flat players from match teams (for getPlayerById) and teamA/teamB by team_id
+  const playersFromMatch = useMemo(() => {
+    const t0 = teams[0];
+    const t1 = teams[1];
+    if (!t0?.members?.length && !t1?.members?.length) return [];
+    const m0 = (t0?.members || []).map((m) => ({ ...m, team_id: t0?.id }));
+    const m1 = (t1?.members || []).map((m) => ({ ...m, team_id: t1?.id }));
+    return [...m0, ...m1];
+  }, [teams]);
+
+  const teamIdsFromMatch = useMemo(() => {
+    const ids = [teams[0]?.id, teams[1]?.id].filter(Boolean);
+    return ids.length === 2 ? [...ids].sort((a, b) => Number(a) - Number(b)) : [];
+  }, [teams]);
+
+  const teamAFromMatch = useMemo(
+    () => playersFromMatch.filter((p) => Number(p.team_id) === Number(teamIdsFromMatch[0]) || String(p.team_id) === String(teamIdsFromMatch[0])),
+    [playersFromMatch, teamIdsFromMatch]
+  );
+  const teamBFromMatch = useMemo(
+    () => playersFromMatch.filter((p) => Number(p.team_id) === Number(teamIdsFromMatch[1]) || String(p.team_id) === String(teamIdsFromMatch[1])),
+    [playersFromMatch, teamIdsFromMatch]
+  );
+
+  // Same as RefereeClient: position source order and fallback from metadata (left = pos_1/pos_2, right = pos_3/pos_4)
+  const positionsFromState = useMemo(() => {
+    const stored =
+      matchState?.display_positions ??
+      matchState?.positions ??
+      matchDetails?.display_positions ??
+      matchDetails?.positions;
+    if (stored && [stored.pos_1, stored.pos_2, stored.pos_3, stored.pos_4].every((v) => v != null)) {
+      return { pos1: stored.pos_1, pos2: stored.pos_2, pos3: stored.pos_3, pos4: stored.pos_4 };
+    }
+    // Fallback: derive from team_a_pos/team_b_pos (same as RefereeClient; Team A = left, Team B = right)
+    const meta = matchState?.metadata ?? matchDetails?.metadata;
+    if (meta?.team_a_pos && meta?.team_b_pos) {
+      return {
+        pos1: meta.team_a_pos.right_player_id ?? null,
+        pos2: meta.team_a_pos.left_player_id ?? null,
+        pos3: meta.team_b_pos.right_player_id ?? null,
+        pos4: meta.team_b_pos.left_player_id ?? null,
+      };
+    }
+    return null;
+  }, [matchState?.display_positions, matchState?.positions, matchState?.metadata, matchDetails?.display_positions, matchDetails?.positions, matchDetails?.metadata]);
+
+  // Same as RefereeClient: getPlayerById and getAssignedTeam
+  const displayByCourtSide = useMemo(() => {
+    const safeTeamA = Array.isArray(teamA) ? teamA : [];
+    const safeTeamB = Array.isArray(teamB) ? teamB : [];
+
+    if (!positionsFromState || playersFromMatch.length === 0) {
+      return { leftTeam: safeTeamA, rightTeam: safeTeamB, leftScore: scoreA, rightScore: scoreB, leftTeamId: teamAId, rightTeamId: teamBId, leftIsTeamA: true };
+    }
+
+    const getPlayerById = (playerId) => {
+      if (playerId == null) return undefined;
+      const numId = Number(playerId);
+      return playersFromMatch.find(
+        (p) => p.id === playerId || Number(p.id) === numId || String(p.id) === String(playerId)
+      );
+    };
+
+    const getAssignedTeam = (side) => {
+      if (side === "left" && positionsFromState.pos1) {
+        const player = getPlayerById(positionsFromState.pos1);
+        if (player && teamAFromMatch.some((p) => Number(p.id) === Number(player.id))) return "teamA";
+        if (player && teamBFromMatch.some((p) => Number(p.id) === Number(player.id))) return "teamB";
+      } else if (side === "right" && positionsFromState.pos3) {
+        const player = getPlayerById(positionsFromState.pos3);
+        if (player && teamAFromMatch.some((p) => Number(p.id) === Number(player.id))) return "teamA";
+        if (player && teamBFromMatch.some((p) => Number(p.id) === Number(player.id))) return "teamB";
+      }
+      return null;
+    };
+
+    const leftCourtTeam = getAssignedTeam("left");
+    const rightCourtTeam = getAssignedTeam("right");
+
+    // Court "teamA" = teamIdsFromMatch[0], "teamB" = teamIdsFromMatch[1]. Map to display teams (teams[0]=teamAId, teams[1]=teamBId) by team id.
+    const leftCourtTeamId = leftCourtTeam === "teamA" ? teamIdsFromMatch[0] : leftCourtTeam === "teamB" ? teamIdsFromMatch[1] : teamAId;
+    const rightCourtTeamId = rightCourtTeam === "teamA" ? teamIdsFromMatch[0] : rightCourtTeam === "teamB" ? teamIdsFromMatch[1] : teamBId;
+    const isLeftFirstTeam = leftCourtTeamId != null && (String(leftCourtTeamId) === String(teamAId) || Number(leftCourtTeamId) === Number(teamAId));
+    const isRightFirstTeam = rightCourtTeamId != null && (String(rightCourtTeamId) === String(teamAId) || Number(rightCourtTeamId) === Number(teamAId));
+
+    // Same as RefereeClient: leftCourtScore = leftCourtTeam === "teamA" ? teamAScore : teamBScore
+    const leftCourtScore = leftCourtTeam === "teamA" ? scoreA : leftCourtTeam === "teamB" ? scoreB : scoreA;
+    const rightCourtScore = rightCourtTeam === "teamA" ? scoreA : rightCourtTeam === "teamB" ? scoreB : scoreB;
+
+    return {
+      leftTeam: isLeftFirstTeam ? safeTeamA : safeTeamB,
+      rightTeam: isRightFirstTeam ? safeTeamA : safeTeamB,
+      leftScore: leftCourtScore,
+      rightScore: rightCourtScore,
+      leftTeamId: leftCourtTeamId ?? teamAId,
+      rightTeamId: rightCourtTeamId ?? teamBId,
+      leftIsTeamA: isLeftFirstTeam,
+    };
+  }, [positionsFromState, playersFromMatch, teamAFromMatch, teamBFromMatch, teamIdsFromMatch, teamA, teamB, scoreA, scoreB, teamAId, teamBId]);
+
+  const status = match?.status || "pending";
+  const statusText = {
+    pending: "Not Started",
+    in_progress: "Live",
+    completed: "Completed",
+    cancelled: "Cancelled",
+  }[status] || status;
+  const effectiveWinnerTeamId = winnerTeamId ?? match?.winner_team_id ?? null;
+
+  // Loading state (after all hooks so hook order is stable)
   if (isLoading) {
     return (
       <div className="min-h-screen w-full bg-background flex items-center justify-center">
@@ -282,9 +425,7 @@ export default function ViewCourtPage() {
     );
   }
 
-  // No active match: show "No Active Match" only if we're not showing a completed match (with winner)
-  const showingCompletedMatch = !activeMatch && !isLoading && completedMatchSnapshot != null;
-  if (!activeMatch && !isLoading && !showingCompletedMatch) {
+  if (!activeMatch && !showingCompletedMatch) {
     return (
       <ScrollablePage className="h-dvh bg-background">
         <ScrollablePageHeader className="relative bg-transparent pointer-events-none">
@@ -318,58 +459,6 @@ export default function ViewCourtPage() {
     );
   }
 
-  // Extract match data: use completed snapshot when showing finished match with winner
-  const match = showingCompletedMatch ? completedMatchSnapshot.match : (matchDetails || activeMatch);
-  const effectiveMatchDetails = showingCompletedMatch ? completedMatchSnapshot.matchDetails : matchDetails;
-  // Use tournament match data for players with AURA, fallback to matchDetails teams
-  const players = tournamentMatchData?.players || [];
-  const teams = effectiveMatchDetails?.teams ?? matchDetails?.teams ?? [];
-
-  // Group players into teams (from tournament API) or fallback to matchDetails teams
-  const teamA = useMemo(() => {
-    if (players && players.length > 0) {
-      return players.filter((p) => p.team === "A") || [];
-    }
-    // Fallback to matchDetails teams
-    return teams[0]?.members?.map((member) => ({
-      id: member.id,
-      name: member.username || `Player ${member.id}`,
-      username: member.username || `Player ${member.id}`,
-      photo_url: member.photo_url,
-      aura: null,
-      team: "A",
-    })) || [];
-  }, [players, teams]);
-
-  const teamB = useMemo(() => {
-    if (players && players.length > 0) {
-      return players.filter((p) => p.team === "B") || [];
-    }
-    // Fallback to matchDetails teams
-    return teams[1]?.members?.map((member) => ({
-      id: member.id,
-      name: member.username || `Player ${member.id}`,
-      username: member.username || `Player ${member.id}`,
-      photo_url: member.photo_url,
-      aura: null,
-      team: "B",
-    })) || [];
-  }, [players, teams]);
-
-  // Match status
-  const status = match?.status || "pending";
-  const statusText = {
-    pending: "Not Started",
-    in_progress: "Live",
-    completed: "Completed",
-    cancelled: "Cancelled",
-  }[status] || status;
-
-  // Winner: from WebSocket (immediate) or match data
-  const effectiveWinnerTeamId = winnerTeamId ?? match?.winner_team_id ?? null;
-  const teamAId = teams[0]?.id ?? null;
-  const teamBId = teams[1]?.id ?? null;
-
   return (
     <ScrollablePage className="h-dvh bg-[#5b584f] bg-linear-to-t from-background/10 via-background/0 to-transparent">
       <ScrollablePageHeader className="relative bg-transparent pointer-events-none ">
@@ -395,19 +484,18 @@ export default function ViewCourtPage() {
         <div className={cn("w-full h-full transition-all duration-500 ease-in-out",
           showStandings ? 'grid grid-cols-2 gap-4' : 'flex items-center justify-center'
         )}>
-          {/* Score Display - Full Width */}
+          {/* Score Display - Full Width (teams/scores aligned to left/right court) */}
           <ScoreSection
             showStandings={showStandings}
-            teamA={teamA}
-            teamB={teamB}
-            scoreA={scoreA}
-            scoreB={scoreB}
-            scoreAnimation={scoreAnimation}
+            leftTeam={displayByCourtSide.leftTeam}
+            rightTeam={displayByCourtSide.rightTeam}
+            leftScore={displayByCourtSide.leftScore}
+            rightScore={displayByCourtSide.rightScore}
+            leftTeamId={displayByCourtSide.leftTeamId}
+            rightTeamId={displayByCourtSide.rightTeamId}
             matchEnded={matchEnded}
             match={match}
             winnerTeamId={effectiveWinnerTeamId}
-            teamAId={teamAId}
-            teamBId={teamBId}
           />
 
           {/* Standings Display - Right Side */}
@@ -464,6 +552,10 @@ function PlayerAura({ player, className }) {
 }
 
 function TeamAuraAverage({ team, className, fill = "white" }) {
+  const list = Array.isArray(team) ? team : [];
+  const avg = list.length > 0
+    ? list.reduce((acc, player) => acc + (player.aura || 0), 0) / list.length
+    : 0;
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -472,7 +564,7 @@ function TeamAuraAverage({ team, className, fill = "white" }) {
       className={cn("font-black text-2xl md:text-3xl tracking-tighter flex items-center gap-2 px-4 py-1 bg-background/20 rounded-full border border-white/20 w-fit", className)}>
       <Zap className={cn("size-6 fill-white/90 text-white/90", fill === "blue" ? "fill-blue-400/90 text-blue-400/90" : "fill-green-400/90 text-green-400/90")} />
       <span className={cn("text-white/90 font-black", className)}>
-        {((team.reduce((acc, player) => acc + (player.aura || 0), 0) / team.length) || 0).toFixed(2)}
+        {avg.toFixed(2)}
       </span>
     </motion.div>
   );
@@ -480,12 +572,23 @@ function TeamAuraAverage({ team, className, fill = "white" }) {
 
 /**
  * ScoreSection Component
- * Displays the score with conditional layout (matching match page UI)
+ * Displays the score with teams/scores aligned to court sides (left team top, right team bottom).
  */
-function ScoreSection({ showStandings, teamA, teamB, scoreA, scoreB, scoreAnimation, matchEnded, match, winnerTeamId, teamAId, teamBId }) {
-  const isTeamAWinner = winnerTeamId != null && teamAId != null && String(winnerTeamId) === String(teamAId);
-  const isTeamBWinner = winnerTeamId != null && teamBId != null && String(winnerTeamId) === String(teamBId);
-  const winningTeam = isTeamAWinner ? teamA : isTeamBWinner ? teamB : null;
+function ScoreSection({
+  showStandings,
+  leftTeam = [],
+  rightTeam = [],
+  leftScore,
+  rightScore,
+  leftTeamId,
+  rightTeamId,
+  matchEnded,
+  match,
+  winnerTeamId,
+}) {
+  const isLeftWinner = winnerTeamId != null && leftTeamId != null && String(winnerTeamId) === String(leftTeamId);
+  const isRightWinner = winnerTeamId != null && rightTeamId != null && String(winnerTeamId) === String(rightTeamId);
+  const winningTeam = isLeftWinner ? leftTeam : isRightWinner ? rightTeam : null;
   const winnerLabel = winningTeam?.length
     ? winningTeam.map((p) => p.name || p.username || "Player").join(" & ")
     : null;
@@ -494,14 +597,14 @@ function ScoreSection({ showStandings, teamA, teamB, scoreA, scoreB, scoreAnimat
     <div className={cn(showStandings ? '' : 'w-full h-full', "transition-all duration-500 flex items-center justify-center")}>
       <div className="size-full relative flex flex-col items-center justify-center">
 
-        {/* Players Grid - Same as match page */}
+        {/* Players Grid - Left court (top), right court (bottom); scores aligned to respective teams */}
         <div className="w-full px-8">
           <div className="grid grid-cols-3 gap-8 items-center">
             <div className="flex flex-col col-span-2 items-center w-full gap-8">
-              {/* Team A  */}
-              <div className={cn("flex flex-col w-full transition-all duration-300", matchEnded && isTeamAWinner && "ring-4 ring-amber-400/80 rounded-2xl bg-amber-500/10 p-4")}>
-                <TeamAuraAverage team={teamA} fill="blue" />
-                {teamA.map((player, index) => (
+              {/* Left court team (top) */}
+              <div className={cn("flex flex-col w-full transition-all duration-300", matchEnded && isLeftWinner && "ring-4 ring-amber-400/80 rounded-2xl bg-amber-500/10 p-4")}>
+                <TeamAuraAverage team={leftTeam} fill="blue" />
+                {leftTeam?.map((player, index) => (
                   <TeamSection key={index} index={index}>
                     <PlayerName player={player} className="text-blue-400/90" />
                   </TeamSection>
@@ -509,10 +612,10 @@ function ScoreSection({ showStandings, teamA, teamB, scoreA, scoreB, scoreAnimat
               </div>
               <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-5xl font-black tracking-tight text-white/20">VS</span>
 
-              {/* Team B  */}
-              <div className={cn("flex flex-col w-full transition-all duration-300", matchEnded && isTeamBWinner && "ring-4 ring-amber-400/80 rounded-2xl bg-amber-500/10 p-4")}>
-                <TeamAuraAverage team={teamB} fill="green" />
-                {teamB.map((player, index) => (
+              {/* Right court team (bottom) */}
+              <div className={cn("flex flex-col w-full transition-all duration-300", matchEnded && isRightWinner && "ring-4 ring-amber-400/80 rounded-2xl bg-amber-500/10 p-4")}>
+                <TeamAuraAverage team={rightTeam} fill="green" />
+                {rightTeam?.map((player, index) => (
                   <TeamSection key={index} index={index}>
                     <PlayerName player={player} className="text-green-400/90" />
                   </TeamSection>
@@ -520,14 +623,20 @@ function ScoreSection({ showStandings, teamA, teamB, scoreA, scoreB, scoreAnimat
               </div>
             </div>
 
-            {/* Score - Middle Column */}
+            {/* Score - Middle Column (top = left court score, bottom = right court score) */}
             <div className="flex flex-col items-center mt-12">
               <div
                 className="flex flex-col gap-8 text-center font-black text-8xl md:text-[16rem] tracking-tighter"
-                key={`${scoreA}-${scoreB}`}
               >
-                <motion.span className={scoreA > scoreB ? "text-white" : "text-white/70"} animate={{ scale: scoreAnimation.teamA ? 1.2 : 1 }} transition={{ duration: 0.3, ease: "easeOut" }}>{scoreA}</motion.span>
-                <motion.span className={scoreB > scoreA ? "text-white" : "text-white/30"} animate={{ scale: scoreAnimation.teamB ? 1.2 : 1 }} transition={{ duration: 0.3, ease: "easeOut" }}>{scoreB}</motion.span>
+                <span
+                  className={leftScore > rightScore ? "text-white" : "text-white/70"}
+                >
+                  {leftScore}
+                </span>
+                <span
+                  className={rightScore > leftScore ? "text-white" : "text-white/30"}>
+                  {rightScore}
+                </span>
               </div>
 
               {/* Match Completed + Winner */}

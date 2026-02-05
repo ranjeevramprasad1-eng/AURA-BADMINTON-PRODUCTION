@@ -550,8 +550,8 @@ export default function TournamentManagePage() {
         {/* Group Manager Section (for Group+Knockout format) - Show directly in Card if round hasn't started */}
         {isGroupKnockoutFormat && (!engineInfo || engineInfo?.current_round === 0) && (
           <div className="px-4">
-            <Card className="p-5 border-border/50 bg-background/80 backdrop-blur-sm rounded-2xl shadow-sm">
-              <div className="flex items-center gap-2 mb-4">
+            <Card className="gap-0 border-border/50 bg-background/80 backdrop-blur-sm rounded-2xl shadow-sm">
+              <div className="flex items-center gap-2 mb-4 px-5">
                 <div className="size-8 rounded-lg bg-primary/10 flex items-center justify-center">
                   <UsersFourIcon className="size-4 text-primary" />
                 </div>
@@ -766,9 +766,24 @@ export default function TournamentManagePage() {
                         <div key={match.match_id} className="p-4 bg-muted/30 rounded-xl border border-border/30 hover:bg-muted/40 transition-colors">
                           <div className="flex items-center justify-between mb-2">
                             <div className="flex-1">
-                              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                                {match.round?.replace('GS-', 'Group ').replace('-R', ' Round ')}
-                              </p>
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                                  {match.round?.replace('GS-', 'Group ').replace('-R', ' Round ')}
+                                </p>
+                                <Badge
+                                  variant="outline"
+                                  className={`text-[10px] font-bold uppercase tracking-wider rounded-lg ${match.status === 'completed'
+                                    ? 'bg-green-500/10 text-green-600 border-green-200'
+                                    : match.status === 'in_progress'
+                                      ? 'bg-orange-500/10 text-orange-600 border-orange-200'
+                                      : match.status === 'paused'
+                                        ? 'bg-amber-500/10 text-amber-600 border-amber-200'
+                                        : 'border-border/50'
+                                    }`}
+                                >
+                                  {match.status?.replace('_', ' ') || 'scheduled'}
+                                </Badge>
+                              </div>
                               <div className="flex items-center gap-2 mt-1.5">
                                 <span className={`text-sm font-semibold ${match.winner_team_id === match.team1?.team_id ? 'font-bold text-green-600' : ''}`}>
                                   {team1Name}
@@ -779,19 +794,7 @@ export default function TournamentManagePage() {
                                 </span>
                               </div>
                             </div>
-                            <Badge
-                              variant="outline"
-                              className={`text-[10px] font-bold uppercase tracking-wider rounded-lg ${match.status === 'completed'
-                                ? 'bg-green-500/10 text-green-600 border-green-200'
-                                : match.status === 'in_progress'
-                                  ? 'bg-orange-500/10 text-orange-600 border-orange-200'
-                                  : match.status === 'paused'
-                                    ? 'bg-amber-500/10 text-amber-600 border-amber-200'
-                                    : 'border-border/50'
-                                }`}
-                            >
-                              {match.status?.replace('_', ' ') || 'scheduled'}
-                            </Badge>
+
                           </div>
 
                           {/* Court and Referee Assignment */}
