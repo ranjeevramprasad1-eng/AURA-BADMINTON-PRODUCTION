@@ -19,6 +19,8 @@ import {
   Play,
   Trophy,
   BadgeQuestionMark,
+  ShieldAlert,
+  RefreshCcw,
 } from "lucide-react";
 import AddTeamDialog from "@/components/tournaments/AddTeamDialog";
 import ScoreDrawer from "@/components/tournaments/ScoreDrawer";
@@ -39,6 +41,7 @@ import {
   ScrollablePageContent,
 } from "@/components/layout/ScrollablePage";
 import { createWebSocketConnection } from "@/lib/websocket";
+import { Card } from "../ui/card";
 
 export default function RefereeClient() {
   const params = useParams();
@@ -64,6 +67,7 @@ export default function RefereeClient() {
   const matchStatus = matchData?.status;
   const isMatchStarted = matchStatus === "in_progress" || matchStatus === "completed";
   const isMatchCompleted = matchStatus === "completed";
+  const isPaused = matchStatus === "paused";
 
   // Track match completion state (can be updated via websocket)
   const [matchEnded, setMatchEnded] = useState(isMatchCompleted);
@@ -288,7 +292,7 @@ export default function RefereeClient() {
     return <div className="p-4 text-center">Match not found</div>;
   }
 
-  const { tournament_name, players, scores, round, court, metadata } = matchData;
+  const { tournament_name, players, scores, round, court } = matchData;
 
   // Detect Game ID (1 = Pickleball, 2 = Badminton)
   const gameId = matchState?.gameId || matchData?.gameId || 1;
@@ -566,21 +570,6 @@ export default function RefereeClient() {
     setPositions(newPositions);
   };
 
-  // Handle team removal
-  const handleTeamRemove = (side) => {
-    const newPositions = { ...positions };
-
-    if (side === "left") {
-      newPositions.pos1 = null;
-      newPositions.pos2 = null;
-    } else {
-      newPositions.pos3 = null;
-      newPositions.pos4 = null;
-    }
-
-    setPositions(newPositions);
-  };
-
   // Handle swap positions within a team
   const handleSwap = (side) => {
     const newPositions = { ...positions };
@@ -614,6 +603,53 @@ export default function RefereeClient() {
 
     setPositions(newPositions);
   };
+
+
+  if (isPaused) {
+    return (
+      <ScrollablePage className="h-dvh bg-background">
+        <ScrollablePageHeader className="pb-0 bg-transparent">
+          <header className="sticky top-0 z-20 backdrop-blur-xl bg-background/80 border-b border-border/40 supports-backdrop-filter:bg-background/60">
+            <div className="flex items-center justify-between px-4 py-3">
+              <Button variant="ghost" size="icon" onClick={() => router.back()}>
+                <ArrowLeft className="size-5" />
+              </Button>
+              <h1 className="text-lg max-w-[256px] truncate font-bold text-center">
+                {tournament_name}
+              </h1>
+              <Button variant="ghost" size="icon">
+                <MoreVertical className="size-5" />
+              </Button>
+            </div>
+          </header>
+        </ScrollablePageHeader>
+        <ScrollablePageContent className="pb-24 pt-4 relative">
+          <div className="flex flex-col items-center justify-center min-h-[60vh] px-4">
+            <Card className="p-8 max-w-md w-full text-center border-border/50 bg-background/80">
+              <div className="flex flex-col items-center gap-4">
+                <div className="size-16 rounded-full bg-destructive/10 flex items-center justify-center">
+                  <ShieldAlert className="size-8 text-destructive" />
+                </div>
+                <div className="text-lg font-bold">Match Paused</div>
+              </div>
+              <div className="text-sm text-muted-foreground">Please continue the match</div>
+              <div className="flex justify-end w-full items-center gap-2 mt-4">
+            
+                <Button variant="outline" onClick={() => router.refresh()} size="icon">
+                  <RefreshCcw />
+                </Button>
+                <Button variant="outline" onClick={() => router.back()} className="flex items-center gap-2">
+                  <ArrowLeft className="size-4" />
+                  Go Back
+                </Button>
+
+              </div>
+            </Card>
+          </div>
+        </ScrollablePageContent>
+      </ScrollablePage>
+    );
+  }
 
   return (
     <ScrollablePage className="h-dvh bg-background">

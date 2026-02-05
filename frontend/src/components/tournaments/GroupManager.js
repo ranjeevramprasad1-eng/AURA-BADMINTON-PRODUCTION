@@ -18,14 +18,12 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   ArrowRightLeft,
   Users,
-  Trophy,
   AlertTriangle,
-  Eye,
   UserCheck,
 } from "lucide-react";
 import { useTournamentEngine } from "@/hooks/useTournamentEngine";
@@ -45,7 +43,6 @@ export function GroupManager({ tournamentId }) {
     teams,
     standings,
     isLoading,
-    isLoadingTeams,
     initializeGroups,
     isInitializing,
     swapTeam,
@@ -58,7 +55,6 @@ export function GroupManager({ tournamentId }) {
   const [swapDialogOpen, setSwapDialogOpen] = useState(false);
   const [selectedTeam, setSelectedTeam] = useState(null);
   const [targetGroup, setTargetGroup] = useState("");
-  const [playersDialogOpen, setPlayersDialogOpen] = useState(false);
 
   // Can only edit groups before matches start
   const canEditGroups =
@@ -104,10 +100,10 @@ export function GroupManager({ tournamentId }) {
   if (!info?.groups) {
     return (
       <>
-        <Card>
+        <Card className="m-6">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Users className="h-5 w-5" />
+              <Users className="size-5" />
               Initialize Groups
             </CardTitle>
           </CardHeader>
@@ -132,20 +128,6 @@ export function GroupManager({ tournamentId }) {
                   <strong>{playerCount}</strong> players
                 </span>
               </div>
-              {teamCount > 0 && (
-                <>
-                  <div className="h-4 w-px bg-border" />
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 gap-1 text-xs"
-                    onClick={() => setPlayersDialogOpen(true)}
-                  >
-                    <Eye className="h-3 w-3" />
-                    View All
-                  </Button>
-                </>
-              )}
             </div>
 
             <div className="flex items-center gap-4">
@@ -180,67 +162,6 @@ export function GroupManager({ tournamentId }) {
             </Button>
           </CardContent>
         </Card>
-
-        {/* Players Dialog */}
-        <Dialog open={playersDialogOpen} onOpenChange={setPlayersDialogOpen}>
-          <DialogContent className="max-w-md max-h-[80vh]">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Users className="h-5 w-5" />
-                Registered Teams ({teamCount})
-              </DialogTitle>
-              <DialogDescription>
-                {playerCount} players in {teamCount} teams
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-2">
-              {teams?.teams?.map((team, idx) => (
-                <div
-                  key={team.team_id}
-                  className="flex items-center justify-between p-3 rounded-lg bg-muted/50 border"
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm font-medium text-muted-foreground w-6">
-                      {idx + 1}.
-                    </span>
-                    <div>
-                      <p className="font-medium text-sm">{team.display_name}</p>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <span className="text-xs text-muted-foreground">
-                          {team.player1_name}
-                        </span>
-                        <span className="text-xs text-muted-foreground">•</span>
-                        <span className="text-xs text-muted-foreground">
-                          {team.player2_name}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                  <Badge variant="outline" className="text-xs">
-                    {team.avg_rating?.toFixed(1) || "?"}
-                  </Badge>
-                </div>
-              ))}
-
-              {teamCount === 0 && (
-                <div className="text-center py-8 text-muted-foreground">
-                  <Users className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                  <p>No teams registered yet</p>
-                </div>
-              )}
-            </div>
-
-            <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => setPlayersDialogOpen(false)}
-              >
-                Close
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
       </>
     );
   }
@@ -250,14 +171,10 @@ export function GroupManager({ tournamentId }) {
   const groupLetters = Object.keys(groups).sort();
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-2">
       {/* Header with actions */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold flex items-center gap-2">
-          <Trophy className="h-5 w-5" />
-          Tournament Groups
-        </h2>
-        {canEditGroups && (
+      {canEditGroups && (
+        <div className="flex items-center px-4">
           <Button
             variant="destructive"
             size="sm"
@@ -266,52 +183,13 @@ export function GroupManager({ tournamentId }) {
           >
             {isResetting ? "Resetting..." : "Reset Groups"}
           </Button>
-        )}
-      </div>
+        </div>
+      )}
 
-      {/* Registration Stats */}
-      <div>
-      <div className="flex items-center gap-4 p-3 bg-muted/50 rounded-lg">
-        <div className="flex items-center gap-2">
-          <Users className="size-4 text-muted-foreground" />
-          <span className="text-sm">
-            <strong>{teamCount}</strong> teams
-          </span>
-        </div>
-        <div className="size-4 w-px bg-border" />
-        <div className="flex items-center gap-2">
-          <UserCheck className="size-4 text-muted-foreground" />
-          <span className="text-sm">
-            <strong>{playerCount}</strong> players
-          </span>
-        </div>
-        <div className="h-4 w-px bg-border" />
-        <div className="flex items-center gap-2">
-          <span className="text-sm">
-            <strong>{groupLetters.length}</strong> groups
-          </span>
-        </div>
-      </div>
-      <div>
-        {teamCount > 0 && (
-          <>
-            <div className="ml-auto" />
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 gap-1 text-xs"
-              onClick={() => setPlayersDialogOpen(true)}
-            >
-              <Eye className="h-3 w-3" />
-              View All Teams
-            </Button>
-          </>
-        )}
-      </div>
-      </div>
+
 
       {/* Stage indicator */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 px-4">
         <Badge variant={info.stage === "group_stage" ? "default" : "secondary"}>
           {info.stage?.replace("_", " ").toUpperCase()}
         </Badge>
@@ -322,54 +200,119 @@ export function GroupManager({ tournamentId }) {
         )}
         {!canEditGroups && (
           <Badge variant="destructive" className="flex items-center gap-1">
-            <AlertTriangle className="h-3 w-3" />
+            <AlertTriangle className="size-3" />
             Locked
           </Badge>
         )}
       </div>
 
-      {/* Groups grid */}
-      <div className="flex flex-col gap-4">
+      {/* Registration Stats */}
+      <div className="px-4 mt-4">
+        <div className="flex items-center gap-4 px-4 py-2 bg-muted/50 rounded-full border border-border w-fit">
+          <div className="flex items-center gap-2">
+            <Users className="size-4 text-muted-foreground" />
+            <span className="text-xs">
+              <strong>{teamCount}</strong> teams
+            </span>
+          </div>
+          <div className="size-4 w-px bg-border" />
+          <div className="flex items-center gap-2">
+            <UserCheck className="size-4 text-muted-foreground" />
+            <span className="text-xs">
+              <strong>{playerCount}</strong> players
+            </span>
+          </div>
+          <div className="h-4 w-px bg-border" />
+          <div className="flex items-center gap-2">
+            <span className="text-xs">
+              <strong>{groupLetters.length}</strong> groups
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Groups tabs */}
+      <Tabs defaultValue="All" className="w-full gap-0 mt-4 ">
+        <TabsList className="w-full flex flex-wrap h-auto gap-1 p-1 rounded-none border-t-2 border-b-2 border-border ">
+          <TabsTrigger value="All" className="flex-1 min-w-0">
+            All
+          </TabsTrigger>
+          {groupLetters.map((groupKey) => (
+            <TabsTrigger key={groupKey} value={groupKey} className="flex-1 min-w-0">
+              {groupKey}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+        <TabsContent value="All" className="mt-0 overflow-y-auto max-h-[50dvh]">
+          <div className="space-y-2 p-2">
+            {teamCount === 0 ? (
+              <p className="text-muted-foreground text-sm">No teams</p>
+            ) : (
+              teams?.teams?.map((team, idx) => (
+                <div
+                  key={team.team_id}
+                  className="flex items-center justify-between bg-background/40 border border-border"
+                >
+                  <div className="flex items-center w-full">
+                    <span className="flex items-center justify-center text-sm font-medium text-muted-foreground size-12 text-center bg-gray-500/20 border border-border">
+                      {idx + 1}
+                    </span>
+                    <div className="flex items-center justify-between w-full mx-2">
+                      <div>
+                        <p className="font-medium text-sm">{team.display_name}</p>
+                        <div className="flex items-center gap-0.5">
+                          <span className="text-xs text-muted-foreground">
+                            {team.player1_name}
+                          </span>
+                          <span className="text-xs text-muted-foreground">•</span>
+                          <span className="text-xs text-muted-foreground">
+                            {team.player2_name}
+                          </span>
+                        </div>
+                      </div>
+                      <Badge variant="outline" className="text-xs">
+                        {team.avg_rating?.toFixed(1) || "?"}
+                      </Badge>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </TabsContent>
         {groupLetters.map((groupKey) => {
-          // Extract letter from "Group A" format
           const letter = groupKey.replace("Group ", "");
           const groupTeams = groups[groupKey] || [];
           const groupStandings = standings?.[groupKey] || [];
 
           return (
-            <Card key={groupKey}>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-lg">{groupKey}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  {groupTeams.length === 0 ? (
-                    <p className="text-muted-foreground text-sm">No teams</p>
-                  ) : (
-                    groupTeams.map((team, idx) => {
-                      const standing = groupStandings.find(
-                        (s) => s.team_id === team.team_id
-                      );
+            <TabsContent key={groupKey} value={groupKey}>
+              <div className="space-y-2 p-2">
+                {groupTeams.length === 0 ? (
+                  <p className="text-muted-foreground text-sm">No teams</p>
+                ) : (
+                  groupTeams.map((team, idx) => {
+                    const standing = groupStandings.find(
+                      (s) => s.team_id === team.team_id
+                    );
 
-                      return (
-                        <div
-                          key={team.team_id}
-                          className="flex items-center justify-between p-2 rounded-lg bg-muted/50"
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium text-muted-foreground w-6">
-                              {standing?.position || idx + 1}.
-                            </span>
-                            <div>
-                              <p className="font-medium text-sm">
-                                {team.display_name}
-                              </p>
-                              <p className="text-xs text-muted-foreground">
-                                Rating: {team.avg_rating?.toFixed(1) || "?"}
-                              </p>
-                            </div>
+                    return (
+                      <div
+                        key={team.team_id}
+                        className="flex items-center justify-between bg-background/40 border border-border"
+                      >
+                        <span className="flex items-center justify-center text-sm font-medium text-muted-foreground size-12 text-center bg-gray-500/20 border border-border">
+                          {standing?.position || idx + 1}
+                        </span>
+                        <div className="flex items-center justify-between w-full mx-2">
+                          <div>
+                            <p className="font-medium text-sm">
+                              {team.display_name}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              Rating: {team.avg_rating?.toFixed(1) || "?"}
+                            </p>
                           </div>
-
                           <div className="flex items-center gap-2">
                             {standing && (
                               <Badge
@@ -386,23 +329,25 @@ export function GroupManager({ tournamentId }) {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-8 w-8"
+                                className="size-8"
                                 onClick={() => openSwapDialog(team, letter)}
                               >
-                                <ArrowRightLeft className="h-4 w-4" />
+                                <ArrowRightLeft className="size-4" />
                               </Button>
                             )}
                           </div>
                         </div>
-                      );
-                    })
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+
+
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </TabsContent>
           );
         })}
-      </div>
+      </Tabs>
 
       {/* Swap Team Dialog */}
       <Dialog open={swapDialogOpen} onOpenChange={setSwapDialogOpen}>
@@ -448,68 +393,6 @@ export function GroupManager({ tournamentId }) {
               disabled={!targetGroup || isSwapping}
             >
               {isSwapping ? "Swapping..." : "Swap Team"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* All Teams Dialog */}
-      <Dialog open={playersDialogOpen} onOpenChange={setPlayersDialogOpen}>
-        <DialogContent className="max-w-md max-h-[80vh]">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Users className="h-5 w-5" />
-              All Teams ({teamCount})
-            </DialogTitle>
-            <DialogDescription>
-              {playerCount} players in {teamCount} teams across{" "}
-              {groupLetters.length} groups
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-2">
-            {teams?.teams?.map((team, idx) => (
-              <div
-                key={team.team_id}
-                className="flex items-center justify-between p-3 rounded-lg bg-muted/50 border"
-              >
-                <div className="flex items-center gap-3">
-                  <span className="text-sm font-medium text-muted-foreground w-6">
-                    {idx + 1}.
-                  </span>
-                  <div>
-                    <p className="font-medium text-sm">{team.display_name}</p>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <span className="text-xs text-muted-foreground">
-                        {team.player1_name}
-                      </span>
-                      <span className="text-xs text-muted-foreground">•</span>
-                      <span className="text-xs text-muted-foreground">
-                        {team.player2_name}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                <Badge variant="outline" className="text-xs">
-                  {team.avg_rating?.toFixed(1) || "?"}
-                </Badge>
-              </div>
-            ))}
-
-            {teamCount === 0 && (
-              <div className="text-center py-8 text-muted-foreground">
-                <Users className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                <p>No teams registered yet</p>
-              </div>
-            )}
-          </div>
-
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setPlayersDialogOpen(false)}
-            >
-              Close
             </Button>
           </DialogFooter>
         </DialogContent>

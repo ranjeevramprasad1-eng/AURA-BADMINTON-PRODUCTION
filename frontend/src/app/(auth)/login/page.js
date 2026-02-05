@@ -2,14 +2,14 @@
 
 import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import Link from "next/link";
 import {
   ScrollablePage,
   ScrollablePageContent,
 } from "@/components/layout/ScrollablePage";
-import { Mail, Lock, Zap } from "lucide-react";
+import { Mail, Lock, Zap, Eye } from "lucide-react";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -23,6 +23,9 @@ export default function LoginPage() {
 
   return (
     <div className="flex min-h-svh flex-col max-w-[500px] mx-auto border-r border-l">
+      <Link href="/browse" className={buttonVariants({ variant: "outline", size: "icon", className: "absolute top-4 right-4 text-xs text-muted-foreground hover:text-primary transition-colors" })}>
+        <Eye />
+      </Link>
       <ScrollablePage className="bg-transparent">
         <ScrollablePageContent className="pb-6 relative flex flex-col justify-end">
           <div className="relative m-4 text-black rounded-lg text-5xl font-black italic tracking-tighter uppercase text-center flex items-center justify-center flex-1">
@@ -84,7 +87,7 @@ export default function LoginPage() {
               <Button
                 type="submit"
                 disabled={isLoggingIn}
-                className="w-full rounded-full font-bold uppercase tracking-wider"
+                className="w-full h-12 rounded-full font-bold uppercase tracking-wider text-base"
                 size="lg"
               >
                 {isLoggingIn ? "Signing in…" : "Sign in"}

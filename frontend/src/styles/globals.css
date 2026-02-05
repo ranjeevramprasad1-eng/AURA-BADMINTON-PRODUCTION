@@ -1,7 +1,9 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-
+@theme {
+  --font-koulen: var(--font-koulen);
+}
 
 @custom-variant dark (&:is(.dark *));
 

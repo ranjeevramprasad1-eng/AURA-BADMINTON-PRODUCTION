@@ -2,13 +2,13 @@
 
 import { useParams, useRouter } from "next/navigation";
 import { useMemo, useState, useEffect, useRef } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { courtsApi, tournamentsApi } from "@/lib/api";
 import { useActiveCourtMatch } from "@/hooks/useCourtMatches";
 import { useTournamentEngine } from "@/hooks/useTournamentEngine";
 import { useDisplayTimer } from "@/hooks/useDisplayTimer";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { ArrowLeft, Loader2, Zap } from "lucide-react";
 import {
   ScrollablePage,
   ScrollablePageHeader,
@@ -35,6 +35,7 @@ import { Button } from "@/components/ui/button";
 export default function ViewCourtPage() {
   const params = useParams();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const tournamentId = params.id;
   const courtId = params.courtId;
 
@@ -61,6 +62,9 @@ export default function ViewCourtPage() {
   const [scoreA, setScoreA] = useState(0);
   const [scoreB, setScoreB] = useState(0);
   const [matchEnded, setMatchEnded] = useState(false);
+  const [winnerTeamId, setWinnerTeamId] = useState(null);
+  /** When match ends, keep showing it (with winner) until next match or timeout */
+  const [completedMatchSnapshot, setCompletedMatchSnapshot] = useState(null);
   const [scoreAnimation, setScoreAnimation] = useState({
     teamA: false,
     teamB: false,
@@ -68,6 +72,41 @@ export default function ViewCourtPage() {
   const prevScoreA = useRef(0);
   const prevScoreB = useRef(0);
   const wsConnectionRef = useRef(null);
+  const tournamentWsRef = useRef(null);
+
+  // Tournament WebSocket: when next match is assigned to this court (or match list changes), refetch so screen updates
+  useEffect(() => {
+    if (!tournamentId) return;
+    const ws = createWebSocketConnection(`/ws/tournament/${tournamentId}/updates`, {
+      onOpen: () => {
+        console.log("🔌 [Fullscreen] Tournament updates WebSocket connected");
+      },
+      onClose: () => {
+        console.log("🔌 [Fullscreen] Tournament updates WebSocket disconnected");
+      },
+      onError: (err) => {
+        console.error("❌ [Fullscreen] Tournament updates WebSocket error:", err);
+      },
+      onMessage: (data) => {
+        const triggers = [
+          "standings_update",
+          "match_start",
+          "match_complete",
+          "match_update",
+          "court_match_update",
+        ];
+        if (triggers.includes(data.type)) {
+          queryClient.invalidateQueries({ queryKey: ["matches", "court", tournamentId, courtId] });
+        }
+      },
+      reconnect: true,
+    });
+    tournamentWsRef.current = ws;
+    return () => {
+      if (tournamentWsRef.current?.close) tournamentWsRef.current.close();
+      tournamentWsRef.current = null;
+    };
+  }, [tournamentId, courtId, queryClient]);
 
   // Fetch match details with player AURA scores from tournament API
   const { data: tournamentMatchData } = useQuery({
@@ -84,6 +123,19 @@ export default function ViewCourtPage() {
     },
     enabled: !!tournamentId && !!matchDetails?.round && !!activeMatch?.id,
   });
+
+  // Change state only when next match starts (or on reload). Keep showing completed match + winner until then.
+  const matchIdRef = useRef(matchDetails?.id ?? activeMatch?.id);
+  useEffect(() => {
+    const nextMatchId = activeMatch?.id;
+    // Only clear completed state when a new match has started (different from the one in snapshot)
+    if (nextMatchId != null && nextMatchId !== completedMatchSnapshot?.match?.id) {
+      matchIdRef.current = nextMatchId;
+      setMatchEnded(false);
+      setWinnerTeamId(null);
+      setCompletedMatchSnapshot(null);
+    }
+  }, [activeMatch?.id, completedMatchSnapshot?.match?.id]);
 
   // Initialize score from match details and connect to WebSocket
   useEffect(() => {
@@ -102,9 +154,12 @@ export default function ViewCourtPage() {
 
     }
 
-    // Update match ended state
+    // Update match ended state and winner
     if (matchDetails.status === "completed") {
       setMatchEnded(true);
+      if (matchDetails.winner_team_id != null) {
+        setWinnerTeamId(matchDetails.winner_team_id);
+      }
     }
 
     // Connect to WebSocket for real-time updates
@@ -138,6 +193,13 @@ export default function ViewCourtPage() {
             setScoreB(data.teamB);
           } else if (data.type === "match_end") {
             setMatchEnded(true);
+            if (data.winnerTeamId != null) setWinnerTeamId(data.winnerTeamId);
+            // Keep showing this match (with winner) until next match loads
+            setCompletedMatchSnapshot({
+              matchDetails: { ...matchDetails, status: "completed", winner_team_id: data.winnerTeamId ?? matchDetails?.winner_team_id },
+              match: { ...(matchDetails || activeMatch), status: "completed", winner_team_id: data.winnerTeamId ?? matchDetails?.winner_team_id },
+            });
+            // Court match list refetch is driven by tournament WebSocket (standings_update / match_complete etc.)
           }
         },
         reconnect: true,
@@ -151,7 +213,7 @@ export default function ViewCourtPage() {
         }
       };
     }
-  }, [matchDetails, activeMatch?.id, tournamentMatchData]);
+  }, [matchDetails, activeMatch?.id, tournamentMatchData, queryClient, tournamentId, courtId]);
 
   // Detect score changes and trigger animations
   useEffect(() => {
@@ -220,8 +282,9 @@ export default function ViewCourtPage() {
     );
   }
 
-  // No active match state
-  if (!activeMatch && !isLoading) {
+  // No active match: show "No Active Match" only if we're not showing a completed match (with winner)
+  const showingCompletedMatch = !activeMatch && !isLoading && completedMatchSnapshot != null;
+  if (!activeMatch && !isLoading && !showingCompletedMatch) {
     return (
       <ScrollablePage className="h-dvh bg-background">
         <ScrollablePageHeader className="relative bg-transparent pointer-events-none">
@@ -255,12 +318,12 @@ export default function ViewCourtPage() {
     );
   }
 
-  // Extract match data
-  const match = matchDetails || activeMatch;
-
+  // Extract match data: use completed snapshot when showing finished match with winner
+  const match = showingCompletedMatch ? completedMatchSnapshot.match : (matchDetails || activeMatch);
+  const effectiveMatchDetails = showingCompletedMatch ? completedMatchSnapshot.matchDetails : matchDetails;
   // Use tournament match data for players with AURA, fallback to matchDetails teams
   const players = tournamentMatchData?.players || [];
-  const teams = matchDetails?.teams || [];
+  const teams = effectiveMatchDetails?.teams ?? matchDetails?.teams ?? [];
 
   // Group players into teams (from tournament API) or fallback to matchDetails teams
   const teamA = useMemo(() => {
@@ -302,6 +365,11 @@ export default function ViewCourtPage() {
     cancelled: "Cancelled",
   }[status] || status;
 
+  // Winner: from WebSocket (immediate) or match data
+  const effectiveWinnerTeamId = winnerTeamId ?? match?.winner_team_id ?? null;
+  const teamAId = teams[0]?.id ?? null;
+  const teamBId = teams[1]?.id ?? null;
+
   return (
     <ScrollablePage className="h-dvh bg-[#5b584f] bg-linear-to-t from-background/10 via-background/0 to-transparent">
       <ScrollablePageHeader className="relative bg-transparent pointer-events-none ">
@@ -311,7 +379,7 @@ export default function ViewCourtPage() {
           status={status}
           statusText={statusText}
           round={match?.round}
-          onBack={() => router.back()}
+          onBack={() => router.push(`/tournaments/${tournamentId}/stats`)}
           progressPercentage={progressPercentage}
           isPaused={isPaused}
           isStopped={isStopped}
@@ -337,6 +405,9 @@ export default function ViewCourtPage() {
             scoreAnimation={scoreAnimation}
             matchEnded={matchEnded}
             match={match}
+            winnerTeamId={effectiveWinnerTeamId}
+            teamAId={teamAId}
+            teamBId={teamBId}
           />
 
           {/* Standings Display - Right Side */}
@@ -353,91 +424,116 @@ export default function ViewCourtPage() {
   );
 }
 
+function PlayerName({ player, className }) {
+  return (
+    <motion.p
+      className={cn("text-xl sm:text-7xl capitalize font-black text-center truncate max-w-full text-white/90 leading-tight", className)}
+    >
+      {player.name || player.username || "Player"}
+    </motion.p>
+  );
+}
+
+function TeamSection({ children, index, className }) {
+  return (
+    <motion.div
+      key={index}
+      className={cn("flex items-center w-full", className)}
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{
+        duration: 0.5,
+        delay: index * 0.1,
+        ease: "easeOut",
+      }}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
+function PlayerAura({ player, className }) {
+  return (
+    <motion.div
+      className={cn("size-24 rounded-full flex items-center justify-center text-blue-100/90 font-black text-2xl border-4 border-background/10 shadow-lg", className)}
+      transition={{ duration: 0.2 }}
+    >
+      {player.aura ? player.aura.toFixed(1) : "N/A"}
+    </motion.div>
+  );
+}
+
+function TeamAuraAverage({ team, className, fill = "white" }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+
+      className={cn("font-black text-2xl md:text-3xl tracking-tighter flex items-center gap-2 px-4 py-1 bg-background/20 rounded-full border border-white/20 w-fit", className)}>
+      <Zap className={cn("size-6 fill-white/90 text-white/90", fill === "blue" ? "fill-blue-400/90 text-blue-400/90" : "fill-green-400/90 text-green-400/90")} />
+      <span className={cn("text-white/90 font-black", className)}>
+        {((team.reduce((acc, player) => acc + (player.aura || 0), 0) / team.length) || 0).toFixed(2)}
+      </span>
+    </motion.div>
+  );
+}
+
 /**
  * ScoreSection Component
  * Displays the score with conditional layout (matching match page UI)
  */
-function ScoreSection({ showStandings, teamA, teamB, scoreA, scoreB, scoreAnimation, matchEnded, match }) {
+function ScoreSection({ showStandings, teamA, teamB, scoreA, scoreB, scoreAnimation, matchEnded, match, winnerTeamId, teamAId, teamBId }) {
+  const isTeamAWinner = winnerTeamId != null && teamAId != null && String(winnerTeamId) === String(teamAId);
+  const isTeamBWinner = winnerTeamId != null && teamBId != null && String(winnerTeamId) === String(teamBId);
+  const winningTeam = isTeamAWinner ? teamA : isTeamBWinner ? teamB : null;
+  const winnerLabel = winningTeam?.length
+    ? winningTeam.map((p) => p.name || p.username || "Player").join(" & ")
+    : null;
+
   return (
     <div className={cn(showStandings ? '' : 'w-full h-full', "transition-all duration-500 flex items-center justify-center")}>
       <div className="size-full relative flex flex-col items-center justify-center">
 
         {/* Players Grid - Same as match page */}
-        <div className="w-full px-8 py-4 pb-0">
+        <div className="w-full px-8">
           <div className="grid grid-cols-3 gap-8 items-center">
-            {/* Team A - Left Column */}
-            <motion.div
-              className="flex flex-col items-center gap-4"
-              animate={{
-                scale: scoreAnimation.teamA ? 1.05 : 1,
-              }}
-              transition={{ duration: 0.3, ease: "easeOut" }}
-            >
-              {teamA.map((player, index) => (
-                <motion.div
-                  key={player.id || index}
-                  className="flex flex-col items-center"
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{
-                    duration: 0.5,
-                    delay: index * 0.1,
-                    ease: "easeOut",
-                  }}
-                  whileHover={{ scale: 1.05 }}
-                >
-                  <div className="relative mb-4">
-                    <motion.div
-                      className="size-32 bg-linear-to-br from-brand-blue to-blue-600/50 rounded-full flex items-center justify-center text-blue-100/90 font-black text-3xl border-4 border-background/10 shadow-lg"
-                      whileHover={{
-                        scale: 1.1,
-                        boxShadow: "0 10px 25px rgba(59, 130, 246, 0.4)",
-                      }}
-                      transition={{ duration: 0.2 }}
-                    >
-                      {player.aura ? player.aura.toFixed(1) : "N/A"}
-                    </motion.div>
-                  </div>
-                  <motion.p
-                    className="text-xl font-bold text-center truncate max-w-[120px] md:max-w-[160px] lg:max-w-[200px] text-white/90"
-                    whileHover={{ color: "#3b82f6" }}
-                    transition={{ duration: 0.2 }}
-                  >
-                    {player.name || player.username || "Player"}
-                  </motion.p>
-                </motion.div>
-              ))}
-            </motion.div>
+            <div className="flex flex-col col-span-2 items-center w-full gap-8">
+              {/* Team A  */}
+              <div className={cn("flex flex-col w-full transition-all duration-300", matchEnded && isTeamAWinner && "ring-4 ring-amber-400/80 rounded-2xl bg-amber-500/10 p-4")}>
+                <TeamAuraAverage team={teamA} fill="blue" />
+                {teamA.map((player, index) => (
+                  <TeamSection key={index} index={index}>
+                    <PlayerName player={player} className="text-blue-400/90" />
+                  </TeamSection>
+                ))}
+              </div>
+              <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-5xl font-black tracking-tight text-white/20">VS</span>
+
+              {/* Team B  */}
+              <div className={cn("flex flex-col w-full transition-all duration-300", matchEnded && isTeamBWinner && "ring-4 ring-amber-400/80 rounded-2xl bg-amber-500/10 p-4")}>
+                <TeamAuraAverage team={teamB} fill="green" />
+                {teamB.map((player, index) => (
+                  <TeamSection key={index} index={index}>
+                    <PlayerName player={player} className="text-green-400/90" />
+                  </TeamSection>
+                ))}
+              </div>
+            </div>
 
             {/* Score - Middle Column */}
-            <div className="flex flex-col items-center mt-8">
-              <motion.div
-                className="text-center font-black text-8xl md:text-9xl lg:text-[12rem] xl:text-[16rem] tracking-tighter mb-2"
+            <div className="flex flex-col items-center mt-12">
+              <div
+                className="flex flex-col gap-8 text-center font-black text-8xl md:text-[16rem] tracking-tighter"
                 key={`${scoreA}-${scoreB}`}
-                initial={{ scale: 1 }}
-                animate={{
-                  scale: scoreAnimation.teamA || scoreAnimation.teamB ? 1.2 : 1,
-                }}
-                transition={{
-                  duration: 0.3,
-                  ease: "easeOut",
-                }}
               >
-                <span className={scoreA > scoreB ? "text-white" : "text-white/70"}>{scoreA}</span>
-                <span className="text-white/30 mx-12">-</span>
-                <span className={scoreB > scoreA ? "text-white" : "text-white/30"}>{scoreB}</span>
-              </motion.div>
-
-              <div className="flex items-center gap-3 mt-4">
-                <div className={`size-3 md:size-4 rounded-full ${scoreA > scoreB ? "bg-linear-to-br from-brand-blue to-blue-600/50" : "bg-linear-to-br from-brand-muted to-blue-600/50"}`} />
-                <span className="text-5xl font-bold uppercase tracking-widest text-white/30">VS</span>
-                <div className={`size-3 md:size-4 rounded-full ${scoreB > scoreA ? "bg-linear-to-br from-brand-green/50 via-green-600 to-green-600/50" : "bg-linear-to-br from-brand-muted to-green-600/50"}`} />
+                <motion.span className={scoreA > scoreB ? "text-white" : "text-white/70"} animate={{ scale: scoreAnimation.teamA ? 1.2 : 1 }} transition={{ duration: 0.3, ease: "easeOut" }}>{scoreA}</motion.span>
+                <motion.span className={scoreB > scoreA ? "text-white" : "text-white/30"} animate={{ scale: scoreAnimation.teamB ? 1.2 : 1 }} transition={{ duration: 0.3, ease: "easeOut" }}>{scoreB}</motion.span>
               </div>
 
-              {/* Match Completed Indicator */}
+              {/* Match Completed + Winner */}
               {matchEnded && (
                 <motion.div
-                  className="mt-4 flex items-center justify-center"
+                  className="mt-6 flex flex-col items-center justify-center gap-3"
                   initial={{ opacity: 0, scale: 0.8 }}
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ duration: 0.5, ease: "easeOut" }}
@@ -447,55 +543,19 @@ function ScoreSection({ showStandings, teamA, teamB, scoreA, scoreB, scoreAnimat
                       <span>🏆</span> Match Completed
                     </div>
                   </div>
+                  {winnerLabel && (
+                    <div className="px-6 py-3 bg-amber-500/20 border-2 border-amber-400/50 rounded-xl backdrop-blur-sm">
+                      <p className="text-xs font-bold text-amber-200/90 uppercase tracking-wider mb-1">Winner</p>
+                      <p className="text-xl md:text-2xl font-black text-white text-center tracking-tight">
+                        {winnerLabel}
+                      </p>
+                    </div>
+                  )}
                 </motion.div>
               )}
-              <MatchInfoFooter match={match} />
             </div>
-
-            {/* Team B - Right Column */}
-            <motion.div
-              className="flex flex-col items-center gap-4"
-              animate={{
-                scale: scoreAnimation.teamB ? 1.05 : 1,
-              }}
-              transition={{ duration: 0.3, ease: "easeOut" }}
-            >
-              {teamB.map((player, index) => (
-                <motion.div
-                  key={player.id || index}
-                  className="flex flex-col items-center"
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{
-                    duration: 0.5,
-                    delay: index * 0.1,
-                    ease: "easeOut",
-                  }}
-                  whileHover={{ scale: 1.05 }}
-                >
-                  <div className="relative mb-4">
-                    <motion.div
-                      className="size-32 bg-linear-to-br from-brand-green/50 via-green-600 to-green-600/50 rounded-full flex items-center justify-center text-green-100/90 font-black text-3xl border-4 border-background/40 shadow-lg"
-                      whileHover={{
-                        scale: 1.1,
-                        boxShadow: "0 10px 25px rgba(16, 185, 129, 0.4)",
-                      }}
-                      transition={{ duration: 0.2 }}
-                    >
-                      {player.aura ? player.aura.toFixed(1) : "N/A"}
-                    </motion.div>
-                  </div>
-                  <motion.p
-                    className="text-2xl font-bold text-center truncate max-w-[120px] md:max-w-[160px] lg:max-w-[200px] text-white/90"
-                    whileHover={{ color: "#10b981" }}
-                    transition={{ duration: 0.2 }}
-                  >
-                    {player.name || player.username || "Player"}
-                  </motion.p>
-                </motion.div>
-              ))}
-            </motion.div>
           </div>
+          <MatchInfoFooter match={match} />
         </div>
 
       </div>
@@ -509,16 +569,16 @@ function ScoreSection({ showStandings, teamA, teamB, scoreA, scoreB, scoreAnimat
  */
 function MatchInfoFooter({ match }) {
   return (
-    <div className="mt-4 text-center space-y-3">
+    <div className="absolute bottom-4 right-4 text-center space-y-3">
       {match?.start_time && (
-        <div className="bg-background/20 rounded-xl p-3 border border-white/20 inline-block">
-          <p className="text-sm md:text-lg text-white/70 font-medium">
+        <div className="bg-background/20 rounded-full px-2 py-1 border border-white/20 inline-block">
+          <p className="text-xs md:text-base text-white/70 font-medium">
             Started: {new Date(match.start_time).toLocaleTimeString()}
           </p>
         </div>
       )}
       {!match?.refree_id && (
-        <p className="text-xs md:text-sm text-white/70 uppercase tracking-wide font-medium">
+        <p className="text-xs md:text-sm text-white/70 uppercase tracking-wide font-medium px-1.5 py-0.5">
           No Referee Assigned yet
         </p>
       )}

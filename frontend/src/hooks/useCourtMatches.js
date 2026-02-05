@@ -109,6 +109,7 @@ export function useCourtMatches(tournamentId, courtId, options = {}) {
                 winner_team_id: data.winnerTeamId,
               };
             });
+            // Court match list refetch is driven by tournament WebSocket (standings_update / court_match_update etc.)
           }
         },
         reconnect: true,
@@ -153,7 +154,7 @@ export function useActiveCourtMatch(tournamentId, courtId, options = {}) {
 
   // Get the active match (in_progress or most recent)
   const activeMatch = matchesQuery.data?.find(
-    (m) => m.status === 'in_progress' || 'scheduled' && m.court_id === parseInt(courtId)
+    (m) => m?.status === 'in_progress' && m?.court_id === parseInt(courtId)
   ) || null;
 
   // Fetch detailed match data if we have an active match

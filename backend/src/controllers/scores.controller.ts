@@ -103,7 +103,7 @@ export async function createScore(c: Context<AuthContext>) {
     // Verify match exists
     const { data: match } = await supabase
       .from("matches")
-      .select("id")
+      .select("id, status")
       .eq("id", body.match_id)
       .single();
 
@@ -141,6 +141,14 @@ export async function createScore(c: Context<AuthContext>) {
       throw new HTTPException(500, { message: error.message });
     }
 
+    // If match was paused, set back to in_progress when score is updated
+    if (match.status === "paused") {
+      await supabase
+        .from("matches")
+        .update({ status: "in_progress" })
+        .eq("id", body.match_id);
+    }
+
     return c.json({ data: score }, 201);
   } catch (error) {
     if (error instanceof HTTPException) {
@@ -161,10 +169,10 @@ export async function updateScore(c: Context<AuthContext>) {
       throw new HTTPException(400, { message: "Invalid score ID" });
     }
 
-    // Verify score exists
+    // Verify score exists and get match_id for status update
     const { data: existingScore } = await supabase
       .from("scores")
-      .select("id")
+      .select("id, match_id")
       .eq("id", scoreId)
       .single();
 
@@ -202,6 +210,19 @@ export async function updateScore(c: Context<AuthContext>) {
 
     if (error) {
       throw new HTTPException(500, { message: error.message });
+    }
+
+    // If match was paused, set back to in_progress when score is updated
+    const { data: match } = await supabase
+      .from("matches")
+      .select("status")
+      .eq("id", existingScore.match_id)
+      .single();
+    if (match?.status === "paused") {
+      await supabase
+        .from("matches")
+        .update({ status: "in_progress" })
+        .eq("id", existingScore.match_id);
     }
 
     return c.json({ data: score });

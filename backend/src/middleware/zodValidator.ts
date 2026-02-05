@@ -1,4 +1,3 @@
-import { HTTPException } from "hono/http-exception";
 import { fromZodError } from "zod-validation-error";
 
 import type {

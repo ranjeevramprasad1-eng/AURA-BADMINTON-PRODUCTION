@@ -505,6 +505,14 @@ export async function updateMatch(c: Context<AuthContext>) {
       throw new HTTPException(500, { message: error.message });
     }
 
+    // When a match is assigned to a court, notify tournament subscribers so court view can refresh
+    if (match?.tournament_id && updateData.court_id !== undefined) {
+      broadcastTournamentUpdate(match.tournament_id, "court_match_update", {
+        courtId: match.court_id,
+        matchId: match.id,
+      });
+    }
+
     return c.json({ data: match });
   } catch (error) {
     if (error instanceof HTTPException) {

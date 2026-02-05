@@ -130,7 +130,7 @@ export async function startNextRound(tournamentId: number): Promise<RoundResult>
             .from('matches')
             .select('id, status')
             .eq('tournament_id', tournamentId)
-            .in('status', ['scheduled', 'in_progress']);
+            .in('status', ['scheduled', 'in_progress', 'paused']);
 
         if (incompleteMatches && incompleteMatches.length > 0) {
             return {

@@ -5,15 +5,13 @@ import { useParams, useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   tournamentsApi,
-  playersApi,
   pairingsApi,
   matchesApi,
   courtsApi,
 } from "@/lib/api";
 import { useUser } from "@/hooks/useUser";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -26,18 +24,24 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import {
+  Drawer,
+  DrawerContent,
+  DrawerDescription,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerTrigger,
+} from "@/components/ui/drawer";
+import {
   ArrowLeft,
-  UserPlus,
-  X,
-  Search,
   Users,
   Play,
+  Pause,
   Clock,
   Trophy,
   ShieldAlert,
   LayoutGrid,
-  Eye,
   Trash2,
+  ChevronRight,
 } from "lucide-react";
 import {
   ScrollablePage,
@@ -46,16 +50,17 @@ import {
 } from "@/components/layout/ScrollablePage";
 import { toast } from "sonner";
 import { GroupManager } from "@/components/tournaments/GroupManager";
+import { RefereeManager } from "@/components/tournaments/RefereeManager";
 import { useTournamentEngine } from "@/hooks/useTournamentEngine";
-import { TournamentManageNav } from "@/components/navigation/TournamentManageNav";
+import Link from "next/link";
+import { UsersFourIcon } from "@phosphor-icons/react";
 
 export default function TournamentManagePage() {
   const params = useParams();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const [searchQuery, setSearchQuery] = useState("");
-  const [isSearchDialogOpen, setIsSearchDialogOpen] = useState(false);
   const [isGroupManagerDialogOpen, setIsGroupManagerDialogOpen] = useState(false);
+  const [isRefereeDrawerOpen, setIsRefereeDrawerOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
   const { data: tournament, isLoading } = useQuery({
@@ -76,44 +81,6 @@ export default function TournamentManagePage() {
     startNextRound: startEngineRound,
     isStartingRound: isStartingEngineRound,
   } = useTournamentEngine(params.id);
-
-  const { data: searchResults, isLoading: isSearching } = useQuery({
-    queryKey: ["player-search", searchQuery],
-    queryFn: async () => {
-      if (!searchQuery || searchQuery.length < 2) return { players: [] };
-      const response = await playersApi.search(searchQuery);
-      return response.data.data;
-    },
-    enabled: searchQuery.length >= 2 && isSearchDialogOpen,
-  });
-
-  const addRefereeMutation = useMutation({
-    mutationFn: (playerId) => tournamentsApi.addReferee(params.id, playerId),
-    onSuccess: () => {
-      toast.success("Referee added successfully!");
-      setIsSearchDialogOpen(false);
-      setSearchQuery("");
-      queryClient.invalidateQueries({ queryKey: ["tournament", params.id] });
-    },
-    onError: (error) => {
-      const errorMessage =
-        error?.response?.data?.message || "Failed to add referee";
-      toast.error(errorMessage);
-    },
-  });
-
-  const removeRefereeMutation = useMutation({
-    mutationFn: (playerId) => tournamentsApi.removeReferee(params.id, playerId),
-    onSuccess: () => {
-      toast.success("Referee removed successfully!");
-      queryClient.invalidateQueries({ queryKey: ["tournament", params.id] });
-    },
-    onError: (error) => {
-      const errorMessage =
-        error?.response?.data?.message || "Failed to remove referee";
-      toast.error(errorMessage);
-    },
-  });
 
   const deleteTournamentMutation = useMutation({
     mutationFn: () => tournamentsApi.delete(params.id),
@@ -211,6 +178,25 @@ export default function TournamentManagePage() {
     onError: (error) => {
       const errorMessage =
         error?.response?.data?.message || "Failed to assign court";
+      toast.error(errorMessage);
+    },
+  });
+
+  const pauseMatchMutation = useMutation({
+    mutationFn: (matchId) =>
+      matchesApi.update(matchId, { status: "paused" }),
+    onSuccess: () => {
+      toast.success("Match paused");
+      queryClient.invalidateQueries({
+        queryKey: ["current-round-matches", params.id],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["tournament-engine", "matches", params.id],
+      });
+    },
+    onError: (error) => {
+      const errorMessage =
+        error?.response?.data?.message || "Failed to pause match";
       toast.error(errorMessage);
     },
   });
@@ -482,7 +468,7 @@ export default function TournamentManagePage() {
 
         {/* Tournament Info */}
         <div className="px-4 pt-4">
-          <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center justify-between gap-2 mb-2">
             <h2 className="text-2xl font-black italic tracking-tight uppercase">{tournament.name}</h2>
             <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
               <DialogTrigger asChild>
@@ -567,7 +553,7 @@ export default function TournamentManagePage() {
             <Card className="p-5 border-border/50 bg-background/80 backdrop-blur-sm rounded-2xl shadow-sm">
               <div className="flex items-center gap-2 mb-4">
                 <div className="size-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                  <LayoutGrid className="size-4 text-primary" />
+                  <UsersFourIcon className="size-4 text-primary" />
                 </div>
                 <h3 className="font-black text-sm uppercase tracking-wider text-foreground">Group Management</h3>
               </div>
@@ -799,7 +785,9 @@ export default function TournamentManagePage() {
                                 ? 'bg-green-500/10 text-green-600 border-green-200'
                                 : match.status === 'in_progress'
                                   ? 'bg-orange-500/10 text-orange-600 border-orange-200'
-                                  : 'border-border/50'
+                                  : match.status === 'paused'
+                                    ? 'bg-amber-500/10 text-amber-600 border-amber-200'
+                                    : 'border-border/50'
                                 }`}
                             >
                               {match.status?.replace('_', ' ') || 'scheduled'}
@@ -854,25 +842,56 @@ export default function TournamentManagePage() {
                             </div>
                             <div className="flex items-center justify-end gap-2 mt-2">
                               {match.status === 'scheduled' && (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-8 text-xs gap-1.5 font-bold rounded-xl"
-                                  onClick={() => router.push(`/tournaments/referee/${params.id}/${match.round}/${match.match_id}`)}
+                                <Link
+                                  href={`/tournaments/referee/${params.id}/${match?.round}/${match?.match_id}`}
+                                  className={buttonVariants({
+                                    variant: "outline",
+                                    size: "sm",
+                                    className: "h-8 text-xs gap-1.5 font-bold rounded-xl",
+                                  })}
                                 >
                                   <Play className="size-3" />
                                   Score
-                                </Button>
+                                </Link>
                               )}
-                              {match.status === 'in_progress' && (
-                                <Button
-                                  size="sm"
-                                  className="h-8 text-xs gap-1.5 font-bold rounded-xl bg-orange-500 hover:bg-orange-600"
-                                  onClick={() => router.push(`/tournaments/referee/${params.id}/${match.round}/${match.match_id}`)}
+                              {match.status === 'paused' && (
+                                <Link
+                                  className={buttonVariants({
+                                    variant: "outline",
+                                    size: "sm",
+                                    className: "h-8 text-xs gap-1.5 font-bold rounded-xl",
+                                  })}
+                                  href={`/tournaments/referee/${params.id}/${match?.round}/${match?.match_id}`}
                                 >
                                   <Play className="size-3" />
                                   Continue
-                                </Button>
+                                </Link>
+                              )}
+                              {match.status === 'in_progress' && (
+                                <>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-8 text-xs gap-1.5 font-bold rounded-xl"
+                                    onClick={() => pauseMatchMutation.mutate(match.match_id)}
+                                    disabled={pauseMatchMutation.isPending}
+                                  >
+                                    <Pause className="size-3" />
+                                    Pause
+                                  </Button>
+                                  <Link
+                                    className={buttonVariants({
+                                      variant: "outline",
+                                      size: "sm",
+                                      className: "h-8 text-xs gap-1.5 font-bold rounded-xl",
+                                    })}
+                                    href={`/tournaments/referee/${params.id}/${match?.round}/${match?.match_id}`}
+                                  >
+                                    <Play className="size-3" />
+                                    Continue
+                                  </Link>
+
+                                </>
                               )}
                               {match.status === 'completed' && (
                                 <Badge className="text-[10px] font-bold bg-green-500 rounded-lg">✓ Done</Badge>
@@ -889,191 +908,106 @@ export default function TournamentManagePage() {
           );
         })()}
 
-        {/* Referees Section */}
-        <div className="px-4">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-black text-sm uppercase tracking-wider text-foreground flex items-center gap-2">
-              <div className="size-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                <Users className="size-4 text-primary" />
-              </div>
-              Referees
-            </h3>
-            <Dialog
-              open={isSearchDialogOpen}
-              onOpenChange={setIsSearchDialogOpen}
-            >
-              <DialogTrigger asChild>
-                <Button size="sm" variant="outline" className="gap-2 font-bold rounded-lg border-border/50">
-                  <UserPlus className="size-4" />
-                  Add Referee
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="border-border/50">
-                <DialogHeader>
-                  <DialogTitle className="font-black uppercase tracking-tight">Add Referee</DialogTitle>
-                  <DialogDescription>
-                    Search for a player to add as a referee
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <div className="relative group">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 size-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
-                    <Input
-                      placeholder="Search by username..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="pl-10 bg-muted/40 border-transparent focus:bg-background focus:border-input rounded-xl"
-                    />
-                  </div>
-                  {isSearching && (
-                    <div className="text-center py-4 text-muted-foreground">
-                      Searching...
-                    </div>
-                  )}
-                  {searchResults?.players &&
-                    searchResults.players.length > 0 && (
-                      <div className="space-y-2 max-h-60 overflow-y-auto">
-                        {searchResults.players.map((player) => (
-                          <Card
-                            key={player.id}
-                            className="p-3 cursor-pointer hover:bg-muted/50 transition-colors border-border/50 rounded-xl"
-                            onClick={() => {
-                              addRefereeMutation.mutate(player.id);
-                            }}
-                          >
-                            <div className="flex items-center gap-3">
-                              {player.photo_url ? (
-                                <img src={player.photo_url} alt={player.username} className="size-10 rounded-xl object-cover shrink-0 border border-border/50" />
-                              ) : (
-                                <div className="size-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                                  <Users className="size-5 text-primary" />
-                                </div>
-                              )}
-                              <div className="flex-1">
-                                <p className="font-bold text-sm">
-                                  {player.username}
-                                </p>
-                                {player.name && player.name !== player.username && (
-                                  <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide">
-                                    {player.name}
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-                          </Card>
-                        ))}
-                      </div>
-                    )}
-                  {searchQuery.length >= 2 &&
-                    !isSearching &&
-                    searchResults?.players &&
-                    searchResults.players.length === 0 && (
-                      <div className="text-center py-4 text-muted-foreground">
-                        No players found
-                      </div>
-                    )}
-                </div>
-                <DialogFooter>
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setIsSearchDialogOpen(false);
-                      setSearchQuery("");
-                    }}
-                  >
-                    Cancel
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-          </div>
-
-          {referees.length === 0 ? (
-            <Card className="p-8 text-center border-2 border-dashed border-border/50 bg-muted/5 rounded-2xl">
-              <div className="flex flex-col items-center gap-3">
-                <div className="size-14 rounded-2xl bg-muted/30 flex items-center justify-center">
-                  <Users className="size-7 text-muted-foreground/50" />
-                </div>
-                <p className="text-sm text-muted-foreground font-medium">No referees added yet</p>
-              </div>
-            </Card>
-          ) : (
-            <div className="space-y-3">
-              {referees.map((referee, index) => (
-                <Card key={index} className="p-4 border-border/50 bg-background/80 backdrop-blur-sm rounded-xl hover:bg-background transition-colors">
-                  <div className="flex items-center justify-between">
+        {/* Referees Section - Drawer (same pattern as Group Manager) */}
+        <div className="space-y-2 px-4">
+          <Drawer open={isRefereeDrawerOpen} onOpenChange={setIsRefereeDrawerOpen}>
+            <DrawerTrigger asChild>
+              <button
+                type="button"
+                className="group w-full text-left rounded-2xl border border-border bg-linear-to-r from-background to-muted/30 hover:from-primary/5 hover:to-primary/10 hover:border-primary/30 active:scale-[0.99] transition-all duration-200 overflow-hidden shadow-sm hover:shadow"
+              >
+                <div className="flex items-center gap-0">
+                  <div className="flex flex-1 items-center justify-between gap-3 py-3.5 px-4">
                     <div className="flex items-center gap-3">
-                      <div className="size-12 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                      <div className="size-11 rounded-xl bg-primary/15 border border-primary/20 flex items-center justify-center shrink-0">
                         <Users className="size-5 text-primary" />
                       </div>
-                      <div>
-                        <p className="font-bold text-sm">
-                          {referee.name || "Unknown"}
-                        </p>
-                        <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider">Referee</p>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="font-black text-sm uppercase tracking-wider text-foreground">
+                          Referees
+                        </span>
+                        <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">
+                          Add & assign
+                        </span>
                       </div>
+                      {referees.length > 0 && (
+                        <Badge variant="secondary" className="text-[10px] font-bold rounded-full px-2.5">
+                          {referees.length}
+                        </Badge>
+                      )}
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => {
-                        if (
-                          confirm(
-                            `Are you sure you want to remove ${referee.name} as a referee?`
-                          )
-                        ) {
-                          removeRefereeMutation.mutate(referee.player_id);
-                        }
-                      }}
-                      disabled={removeRefereeMutation.isPending}
-                      className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-xl"
-                    >
-                      <X className="size-5" />
-                    </Button>
+                    <div className="flex items-center gap-1.5 text-muted-foreground">
+                      <span className="text-[10px] font-bold uppercase tracking-wider hidden sm:inline">Open</span>
+                      <ChevronRight className="size-5 transition-transform duration-200 group-hover:translate-x-0.5" />
+                    </div>
                   </div>
-                </Card>
-              ))}
-            </div>
-          )}
-        </div>
+                </div>
+              </button>
+            </DrawerTrigger>
+            <DrawerContent className="max-h-[90vh] overflow-hidden flex flex-col max-w-4xl mx-auto">
+              <DrawerHeader>
+                <DrawerTitle className="font-black uppercase tracking-tight flex items-center gap-2">
+                  <Users className="size-5 text-primary" />
+                  Referees
+                </DrawerTitle>
+                <DrawerDescription className="text-left">
+                  Add and manage referees for this tournament
+                </DrawerDescription>
+              </DrawerHeader>
+              <div className="flex-1 overflow-y-auto">
+                <RefereeManager tournamentId={params.id} />
+              </div>
+            </DrawerContent>
+          </Drawer>
 
-        {/* Group Manager Section (for Group+Knockout format) - Show in Dialog if round 1 has started */}
-        {isGroupKnockoutFormat && engineInfo?.current_round > 0 && (
-          <div className="px-4">
-            <Dialog open={isGroupManagerDialogOpen} onOpenChange={setIsGroupManagerDialogOpen}>
-              <DialogTrigger asChild>
-                <Card className="p-5 border-border/50 bg-background/80 backdrop-blur-sm rounded-2xl shadow-sm cursor-pointer hover:bg-background/90 transition-colors">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="size-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                        <LayoutGrid className="size-4 text-primary" />
+          {/* Group Manager Section (for Group+Knockout format) - Show in Drawer if round 1 has started */}
+          {isGroupKnockoutFormat && engineInfo?.current_round > 0 && (
+            <Drawer open={isGroupManagerDialogOpen} onOpenChange={setIsGroupManagerDialogOpen}>
+              <DrawerTrigger asChild>
+                <button
+                  type="button"
+                  className="group w-full text-left rounded-2xl border border-border bg-linear-to-r from-background to-muted/30 hover:from-primary/5 hover:to-primary/10 hover:border-primary/30 active:scale-[0.99] transition-all duration-200 overflow-hidden shadow-sm hover:shadow"
+                >
+                  <div className="flex items-center gap-0">
+                    <div className="flex flex-1 items-center justify-between gap-3 py-3.5 px-4">
+                      <div className="flex items-center gap-3">
+                        <div className="size-11 rounded-xl bg-primary/15 border border-primary/20 flex items-center justify-center shrink-0">
+                          <UsersFourIcon className="size-5 text-primary" />
+                        </div>
+                        <div className="flex flex-col gap-0.5">
+                          <span className="font-black text-sm uppercase tracking-wider text-foreground">
+                            Group Management
+                          </span>
+                          <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">
+                            Standings & swap
+                          </span>
+                        </div>
                       </div>
-                      <h3 className="font-black text-sm uppercase tracking-wider text-foreground">Group Management</h3>
+                      <div className="flex items-center gap-1.5 text-muted-foreground">
+                        <span className="text-[10px] font-bold uppercase tracking-wider hidden sm:inline">Open</span>
+                        <ChevronRight className="size-5 transition-transform duration-200 group-hover:translate-x-0.5" />
+                      </div>
                     </div>
-                    <Button variant="ghost" size="sm" className="gap-2 font-bold rounded-xl">
-                      <Eye className="size-4" />
-                      View Groups
-                    </Button>
                   </div>
-                </Card>
-              </DialogTrigger>
-              <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-                <DialogHeader>
-                  <DialogTitle className="font-black uppercase tracking-tight flex items-center gap-2">
-                    <LayoutGrid className="size-5 text-primary" />
+                </button>
+              </DrawerTrigger>
+              <DrawerContent className="max-h-[90vh] overflow-hidden flex flex-col max-w-4xl mx-auto">
+                <DrawerHeader>
+                  <DrawerTitle className="font-black uppercase tracking-tight flex items-center gap-2">
+                    <UsersFourIcon className="size-5 text-primary" />
                     Group Management
-                  </DialogTitle>
-                  <DialogDescription>
+                  </DrawerTitle>
+                  <DrawerDescription className="text-left">
                     View and manage tournament groups
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="py-4">
+                  </DrawerDescription>
+                </DrawerHeader>
+                <div className="flex-1">
                   <GroupManager tournamentId={params.id} />
                 </div>
-              </DialogContent>
-            </Dialog>
-          </div>
-        )}
+              </DrawerContent>
+            </Drawer>
+          )}
+        </div>
 
         {/* Current Round Matches Section */}
         {roundStatus?.currentRound && (

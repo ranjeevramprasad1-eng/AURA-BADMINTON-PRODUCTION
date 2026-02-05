@@ -1,4 +1,4 @@
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Koulen } from "next/font/google";
 import "@/styles/globals.css";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { QueryProvider } from "@/contexts/QueryProvider";
@@ -14,6 +14,12 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const koulen = Koulen({
+  variable: "--font-koulen",
+  subsets: ["latin"],
+  weight: "400",
+});
+
 export const metadata = {
   title: "AURA - Tournament Management",
   description: "Tournament management application",
@@ -23,7 +29,7 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased overscroll-none`}
+        className={`${geistSans.className} ${geistMono.variable} ${koulen.variable} antialiased overscroll-none`}
       >
         <QueryProvider>
           <AuthProvider>

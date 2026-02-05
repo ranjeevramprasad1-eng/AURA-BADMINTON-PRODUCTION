@@ -142,7 +142,7 @@ export const createMatchSchema = z.object({
   referee_id: z.number().int().positive().optional(),
   court_id: z.number().int().positive().optional(),
   round: z.string().min(1, "Round is required"),
-  status: z.enum(["scheduled", "in_progress", "completed"]).default("scheduled"),
+  status: z.enum(["scheduled", "in_progress", "paused", "completed"]).default("scheduled"),
   start_time: z.string().datetime().optional(),
   end_time: z.string().datetime().optional(),
 });
@@ -151,7 +151,7 @@ export const updateMatchSchema = z.object({
   referee_id: z.number().int().positive().optional(),
   court_id: z.number().int().positive().optional(),
   winner_team_id: z.number().int().positive().optional(),
-  status: z.enum(["scheduled", "in_progress", "completed"]).optional(),
+  status: z.enum(["scheduled", "in_progress", "paused", "completed"]).optional(),
   start_time: z.string().datetime().optional(),
   end_time: z.string().datetime().optional(),
 });
@@ -306,6 +306,6 @@ export const engineMatchIdSchema = z.object({
 // Engine match filter query
 export const engineMatchFilterSchema = z.object({
   round: z.string().optional(),
-  status: z.enum(["scheduled", "completed"]).optional(),
+  status: z.enum(["scheduled", "in_progress", "paused", "completed"]).optional(),
 });
 

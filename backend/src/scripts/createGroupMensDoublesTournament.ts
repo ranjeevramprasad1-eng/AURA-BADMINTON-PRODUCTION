@@ -15,7 +15,7 @@ interface Registration {
 
 const PLAYER_COUNT = 18; //without host and referee
 const GAME_ID = 2; //1: pickleball, 2: badminton
-const TOURNAMENT_NAME = 'Badminton Group Mixed Doubles Tournament';
+const TOURNAMENT_NAME = 'DUMMY Badminton Group Mixed Doubles Tournament';
 
 
 

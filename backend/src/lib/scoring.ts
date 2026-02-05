@@ -542,6 +542,14 @@ app.post("/point", async (c) => {
       return c.json({ error: "Match is finished. Cannot add points." }, 400);
     }
 
+    // If match was paused, resume to in_progress when recording a point
+    if (ctx.matchStatus === "paused") {
+      await supabase
+        .from("matches")
+        .update({ status: "in_progress" })
+        .eq("id", match_id);
+    }
+
     if (
       rally_winner_team_id !== ctx.teamA_id &&
       rally_winner_team_id !== ctx.teamB_id
